@@ -68,7 +68,7 @@ node inspect.js 0x000000000022D473030F116dDEE9F6B43aC78BA3 --network mainnet
 
 ```bash
 cd address-intelligence && npm install
-node scripts/profile.js 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
+node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
 ```
 
 **[Full docs →](address-intelligence/README.md)**
@@ -132,7 +132,7 @@ node inspect.js 0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B --network mainnet
 
 # Module 3: Address Intelligence
 cd ../address-intelligence && npm install
-node scripts/profile.js 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
+node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
 ```
 
 ## Design Principles
@@ -149,7 +149,7 @@ Built for [Pharos Network](https://pharos.xyz) — an EVM-compatible L1 with nat
 
 | Resource | Link |
 |----------|------|
-| Pharos Pacific Mainnet | Chain ID `688688` |
+| Pharos Pacific Mainnet | Chain ID `1672` |
 | Pharos Docs | [docs.pharos.xyz](https://docs.pharos.xyz) |
 | Pharos Explorer | [pharosscan.xyz](https://pharosscan.xyz) |
 | Pharos Agent Kit | [GitHub](https://github.com/aspect-build/pharos-agent-kit) |

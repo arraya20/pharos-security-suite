@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pharos Security Suite — Modular security toolkit for Pharos Network</title>
+<meta name="description" content="Skill inspection, contract introspection & address intelligence for AI agents on Pharos Pacific Mainnet. Deterministic, zero-dependency, mainnet-first.">
+<meta property="og:title" content="Pharos Security Suite">
+<meta property="og:description" content="Modular security toolkit for the Pharos Network ecosystem — for AI agents, smart contracts, and on-chain addresses.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://arraya20.github.io/pharos-security-suite/">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --bg:#0a0e1a; --bg2:#0f1524; --card:#131a2d; --border:#1e2942;
+    --txt:#e6ecf7; --muted:#8a97b3; --accent:#4f9cff; --accent2:#9c6bff;
+    --green:#3ddc84; --amber:#ffb84d; --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none;transition:color .2s}
+  a:hover{color:var(--accent2)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  code{font-family:var(--mono);font-size:.9em}
+
+  /* hero */
+  .hero{position:relative;padding:96px 0 72px;text-align:center;overflow:hidden;border-bottom:1px solid var(--border)}
+  .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(79,156,255,.15),transparent 70%);pointer-events:none}
+  .badge{display:inline-block;padding:6px 14px;border:1px solid var(--border);border-radius:999px;font-size:.8rem;color:var(--muted);margin-bottom:24px;background:var(--bg2)}
+  .badge b{color:var(--green)}
+  h1{font-size:clamp(2.2rem,5vw,3.4rem);font-weight:800;letter-spacing:-.02em;line-height:1.1;background:linear-gradient(135deg,#fff 30%,#8fb8ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .tagline{font-size:clamp(1.05rem,2vw,1.3rem);color:var(--muted);max-width:640px;margin:20px auto 0}
+  .cta{display:flex;gap:14px;justify-content:center;margin-top:36px;flex-wrap:wrap}
+  .btn{padding:12px 26px;border-radius:10px;font-weight:600;font-size:.95rem;border:1px solid var(--border);transition:all .2s}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn-primary:hover{background:#3d8cff;color:#fff;transform:translateY(-2px)}
+  .btn-ghost{background:var(--card);color:var(--txt)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--txt)}
+
+  section{padding:72px 0}
+  .eyebrow{color:var(--accent);font-weight:600;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+  h2{font-size:clamp(1.6rem,3vw,2.2rem);font-weight:700;letter-spacing:-.01em;margin-bottom:8px}
+  .sec-sub{color:var(--muted);margin-bottom:40px;max-width:600px}
+
+  /* module cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .25s;position:relative;overflow:hidden}
+  .card:hover{border-color:var(--accent);transform:translateY(-4px)}
+  .card .num{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+  .card h3{font-size:1.25rem;margin:6px 0 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .tag{font-family:var(--mono);font-size:.7rem;padding:3px 8px;border-radius:6px;font-weight:600}
+  .tag-live{background:rgba(61,220,132,.15);color:var(--green)}
+  .tag-plan{background:rgba(255,184,77,.15);color:var(--amber)}
+  .tag-lang{background:var(--bg2);color:var(--muted)}
+  .card p{color:var(--muted);font-size:.92rem;margin:12px 0 16px}
+  .card ul{list-style:none;font-size:.86rem}
+  .card li{padding:4px 0 4px 22px;position:relative;color:var(--txt)}
+  .card li::before{content:"→";position:absolute;left:0;color:var(--accent)}
+  .card .link{display:inline-block;margin-top:18px;font-size:.88rem;font-weight:600}
+
+  /* code block */
+  pre{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px;overflow-x:auto;font-family:var(--mono);font-size:.85rem;line-height:1.7}
+  pre .c{color:var(--muted)}
+  pre .p{color:var(--green)}
+
+  /* principles */
+  .principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+  .principle{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px}
+  .principle h4{font-size:1rem;margin-bottom:6px;color:var(--accent)}
+  .principle p{color:var(--muted);font-size:.85rem}
+
+  /* arch */
+  .arch{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;text-align:center}
+  .arch pre{background:transparent;border:none;padding:0;display:inline-block;text-align:left;color:var(--muted);font-size:.78rem}
+
+  /* eco table */
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  th,td{padding:14px 20px;text-align:left;border-bottom:1px solid var(--border);font-size:.9rem}
+  th{background:var(--bg2);color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td code{background:var(--bg2);padding:3px 8px;border-radius:5px;color:var(--accent)}
+
+  footer{border-top:1px solid var(--border);padding:48px 0;text-align:center;color:var(--muted);font-size:.88rem}
+  footer a{font-weight:600}
+  .foot-links{display:flex;gap:24px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">🛡️ Built for <b>Pharos Pacific Mainnet</b> · Chain ID 688688</span>
+    <h1>Pharos Security Suite</h1>
+    <p class="tagline">Modular security toolkit for the Pharos Network ecosystem. Deterministic scanning for AI agents, smart contracts, and on-chain addresses — zero hallucinations, minimal dependencies, mainnet-first.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/arraya20/pharos-security-suite">View on GitHub</a>
+      <a class="btn btn-ghost" href="#modules">Explore Modules</a>
+    </div>
+  </div>
+</header>
+
+<section id="modules">
+  <div class="wrap">
+    <div class="eyebrow">Four Modules</div>
+    <h2>Full-surface security coverage</h2>
+    <p class="sec-sub">Each module is independent — use one, or compose all four into a unified security pipeline for autonomous agents.</p>
+    <div class="grid">
+
+      <div class="card">
+        <span class="num">01</span>
+        <h3>Skill Inspector <span class="tag tag-live">v1.0</span> <span class="tag tag-lang">Python</span></h3>
+        <p>Detect prompt injection, data leakage, vulnerable dependencies, and on-chain risks in AI agent skills before you install or publish them.</p>
+        <ul>
+          <li>Zero runtime dependencies (Python 3.10+)</li>
+          <li>Multi-line taint tracking: key → sink</li>
+          <li>Live OSV.dev CVE lookups + offline fallback</li>
+          <li>Output: terminal, JSON, Markdown, SARIF</li>
+        </ul>
+        <a class="link" href="https://github.com/arraya20/pharos-security-suite/tree/main/skill-inspector">Full docs →</a>
+      </div>
+
+      <div class="card">
+        <span class="num">02</span>
+        <h3>Contract Inspector <span class="tag tag-live">v1.1</span> <span class="tag tag-lang">Node.js</span></h3>
+        <p>Point it at any contract on Pharos and get function inventory, proxy resolution, interface detection, and risk scoring — straight from bytecode.</p>
+        <ul>
+          <li>ABI-free: works on unverified contracts</li>
+          <li>Proxy detection: EIP-1167/1967, UUPS, OZ</li>
+          <li>Fingerprint: ERC-20/721/1155, Ownable, Pausable</li>
+          <li>CLI + HTTP API for agent integration</li>
+        </ul>
+        <a class="link" href="https://github.com/arraya20/pharos-security-suite/tree/main/contract-inspector">Full docs →</a>
+      </div>
+
+      <div class="card">
+        <span class="num">03</span>
+        <h3>Address Intelligence <span class="tag tag-live">v1.0</span> <span class="tag tag-lang">Node.js</span></h3>
+        <p>EOA vs contract detection, native + ERC-20 holdings, behavioral classification, and a deterministic 0–100 risk score — from on-chain data.</p>
+        <ul>
+          <li>RPC-only mode works when explorer is down</li>
+          <li>Classification: Whale/Bot/MEV/Dormant, etc.</li>
+          <li>Risk levels: LOW → CRITICAL</li>
+          <li>Graceful degradation with confidence flags</li>
+        </ul>
+        <a class="link" href="https://github.com/arraya20/pharos-security-suite/tree/main/address-intelligence">Full docs →</a>
+      </div>
+
+      <div class="card">
+        <span class="num">04</span>
+        <h3>Agent Trust Layer <span class="tag tag-plan">planned</span></h3>
+        <p>Cryptographic attestation engine that seals audit results from modules 1–3 with verifiable signatures — agent-to-agent trust without a central authority.</p>
+        <ul>
+          <li>Signed attestations (SHA-256 + Ed25519)</li>
+          <li>On-chain attestation registry on Pharos</li>
+          <li>Cross-module unified trust score</li>
+          <li>Verification SDK for consuming agents</li>
+        </ul>
+        <a class="link" href="https://github.com/arraya20/pharos-security-suite">Roadmap →</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--bg2);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="eyebrow">Quick Start</div>
+    <h2>Running in under a minute</h2>
+    <p class="sec-sub">Clone the suite and scan a live mainnet contract or address right away.</p>
+<pre><span class="c"># Clone the suite</span>
+git clone https://github.com/arraya20/pharos-security-suite.git
+cd pharos-security-suite
+
+<span class="c"># Module 2 — inspect a live mainnet contract</span>
+cd contract-inspector &amp;&amp; npm install
+node inspect.js <span class="p">0x000000000022D473030F116dDEE9F6B43aC78BA3</span> --network mainnet
+
+<span class="c"># Module 3 — profile any address</span>
+cd ../address-intelligence &amp;&amp; npm install
+node scripts/profile.js <span class="p">0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2</span> --network mainnet</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Architecture</div>
+    <h2>How the modules compose</h2>
+    <p class="sec-sub">On-chain data flows up through the inspectors into the trust layer; skill screening guards the agent's inputs.</p>
+    <div class="arch">
+<pre>          ┌──────────────────────────────┐
+          │      Pharos Mainnet RPC      │
+          └───────┬──────────────┬───────┘
+                  │              │
+          ┌───────▼────┐   ┌─────▼──────┐
+          │  Contract  │   │  Address   │
+          │  Inspector │   │Intelligence│
+          └───────┬────┘   └─────┬──────┘
+                  └──────┬───────┘
+                  ┌──────▼──────┐
+                  │ Trust Layer │
+                  │(attestation)│
+                  └──────┬──────┘
+          ┌──────────────▼──────────────┐
+          │       Skill Inspector       │
+          │   (agent input screening)   │
+          └─────────────────────────────┘</pre>
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--bg2);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="eyebrow">Design Principles</div>
+    <h2>Why it's built this way</h2>
+    <p class="sec-sub"></p>
+    <div class="principles">
+      <div class="principle"><h4>Modular</h4><p>Each tool is independent. Use one, or compose all four.</p></div>
+      <div class="principle"><h4>Minimal deps</h4><p>Zero/minimal dependencies to shrink the supply-chain attack surface.</p></div>
+      <div class="principle"><h4>Mainnet-first</h4><p>Built for Pharos Pacific Mainnet, not just testnet demos.</p></div>
+      <div class="principle"><h4>Deterministic</h4><p>Fixed-rule pattern matching. No LLM hallucinations.</p></div>
+      <div class="principle"><h4>Agent-native</h4><p>Composable skills designed for autonomous AI agents.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Pharos Ecosystem</div>
+    <h2>Ecosystem alignment</h2>
+    <p class="sec-sub">Built for <a href="https://pharos.xyz">Pharos Network</a> — an EVM-compatible L1 with native AI agent infrastructure via Anvita Flow.</p>
+    <table>
+      <tr><th>Resource</th><th>Reference</th></tr>
+      <tr><td>Pharos Pacific Mainnet</td><td><code>Chain ID 688688</code></td></tr>
+      <tr><td>Pharos Docs</td><td><a href="https://docs.pharos.xyz">docs.pharos.xyz</a></td></tr>
+      <tr><td>Pharos Explorer</td><td><a href="https://pharosscan.xyz">pharosscan.xyz</a></td></tr>
+      <tr><td>Pharos Agent Kit</td><td><a href="https://github.com/aspect-build/pharos-agent-kit">GitHub</a></td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="https://github.com/arraya20/pharos-security-suite">GitHub</a>
+      <a href="https://x.com/namri_20">@namri_20</a>
+      <a href="https://pharos.xyz">Pharos Network</a>
+    </div>
+    <p>Built by <b>Namri</b> · Pharos Skill Builder Campaign winner · Active mainnet contributor</p>
+    <p style="margin-top:8px;opacity:.6">MIT License — see individual module licenses.</p>
+  </div>
+</footer>
+
+</body>
+</html>

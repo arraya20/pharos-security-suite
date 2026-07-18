@@ -156,7 +156,7 @@ Built for [Pharos Network](https://pharos.xyz) — an EVM-compatible L1 with nat
 
 ## Author
 
-**Namri** ([@DudutGante13465](https://x.com/DudutGante13465))
+**Namri** ([@namri_20](https://x.com/namri_20))
 - Pharos Skill Builder Campaign winner
 - Active Pharos mainnet contributor
 

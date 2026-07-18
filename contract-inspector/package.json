@@ -1,0 +1,42 @@
+{
+  "name": "pharos-contract-inspector",
+  "version": "1.1.0",
+  "description": "ABI-free EVM contract introspection for the Pharos Agent Center. Point it at any address on Pharos and get a function inventory, proxy resolution, interface detection, and a privileged/danger function report — straight from bytecode, no verified source required.",
+  "type": "module",
+  "bin": {
+    "pharos-inspect": "inspect.js"
+  },
+  "main": "inspect.js",
+  "scripts": {
+    "inspect": "node inspect.js",
+    "demo": "node inspect.js 0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B --network testnet",
+    "serve": "node server.js",
+    "test": "node test-risk.js && node test-core.js && node test-format.js && node test-disasm.js && node test-proxy.js && node test-rpc.js",
+    "lint": "find . -path ./node_modules -prune -o -path ./.git -prune -o -name '*.js' -type f -exec node --check {} \\;"
+  },
+  "keywords": [
+    "pharos",
+    "agent-center",
+    "skill",
+    "evm",
+    "introspection",
+    "abi",
+    "proxy",
+    "security",
+    "bytecode"
+  ],
+  "author": "arraya20",
+  "license": "MIT-0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arraya20/pharos-contract-inspector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/arraya20/pharos-contract-inspector/issues"
+  },
+  "homepage": "https://github.com/arraya20/pharos-contract-inspector#readme",
+  "dependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}

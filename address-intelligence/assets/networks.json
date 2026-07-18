@@ -1,0 +1,29 @@
+{
+  "networks": {
+    "atlantic_testnet": {
+      "name": "Pharos Atlantic Testnet",
+      "rpcUrl": "https://atlantic.dplabs-internal.com",
+      "chainId": 688689,
+      "nativeCurrency": "PHRS",
+      "whaleThresholdNative": 10000,
+      "dormantBalanceThreshold": 100,
+      "explorerUrl": "https://atlantic.pharosscan.xyz",
+      "explorerApiUrl": "https://atlantic.pharosscan.xyz/api/v2",
+      "verifierUrl": "https://api.socialscan.io/pharos-atlantic-testnet/v1/explorer/command_api/contract"
+    },
+    "pacific_mainnet": {
+      "name": "Pharos Pacific Mainnet",
+      "rpcUrl": "https://rpc.pharos.xyz",
+      "chainId": 1672,
+      "nativeCurrency": "PROS",
+      "whaleThresholdNative": 100000,
+      "whaleThresholdUsd": 50000,
+      "dormantBalanceThreshold": 10000,
+      "dormantBalanceThresholdUsd": 5000,
+      "nativePriceUsdEnv": "PROS_PRICE_USD",
+      "explorerUrl": "https://www.pharosscan.xyz",
+      "explorerApiUrl": "https://www.pharosscan.xyz/api/v2",
+      "verifierUrl": "https://api.socialscan.io/pharos/v1/explorer/command_api/contract"
+    }
+  }
+}

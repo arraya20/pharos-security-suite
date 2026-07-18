@@ -1,0 +1,38 @@
+{
+  "name": "pharos-address-intelligence",
+  "version": "0.1.0",
+  "description": "Read-only address intelligence for Pharos L1 — EOA/contract detection, balances, token holdings, activity, classification, and a 0-100 risk score. Callable as CLI or dependency-free HTTP API.",
+  "type": "module",
+  "bin": {
+    "pharos-address-intel": "./scripts/inspect.mjs"
+  },
+  "files": [
+    "assets/",
+    "scripts/",
+    "references/",
+    "test/",
+    "SKILL.md",
+    "README.md",
+    "LICENSE",
+    "render.yaml"
+  ],
+  "scripts": {
+    "inspect": "node scripts/inspect.mjs",
+    "serve": "node scripts/server.mjs",
+    "test": "node --test",
+    "package:skill": "mkdir -p dist && cd .. && zip -r -FS pharos-address-intelligence/dist/pharos-address-intelligence.zip pharos-address-intelligence/SKILL.md pharos-address-intelligence/scripts pharos-address-intelligence/references pharos-address-intelligence/assets -x 'pharos-address-intelligence/**/.DS_Store' 'pharos-address-intelligence/.DS_Store'"
+  },
+  "keywords": ["pharos", "anvita", "address", "intelligence", "risk", "blockchain"],
+  "license": "MIT-0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arraya20/pharos-address-intelligence.git"
+  },
+  "bugs": {
+    "url": "https://github.com/arraya20/pharos-address-intelligence/issues"
+  },
+  "homepage": "https://github.com/arraya20/pharos-address-intelligence#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}

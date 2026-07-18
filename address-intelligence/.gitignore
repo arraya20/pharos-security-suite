@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.env.*
+.idea/
+node_modules/
+coverage/
+dist/
+*.log
+*.tgz
+*.zip
+SUBMISSION.md

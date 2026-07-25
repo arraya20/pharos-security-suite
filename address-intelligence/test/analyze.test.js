@@ -82,6 +82,7 @@ test("maps SocialScan enrichment and starts explorer calls in parallel", async (
   const fakeRpc = {
     getCode: async () => "0x1234",
     getBalance: async () => "0x0",
+    getBlockNumber: async () => "0x3d090",
     ethCallSafe: async () => ({ ok: true, data: "0x0" }),
     call: async (method) => {
       assert.equal(method, "eth_getTransactionCount");

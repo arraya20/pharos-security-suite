@@ -128,6 +128,7 @@ export async function analyzeAddress(address, networkKey = "atlantic_testnet", o
     apiKey: explorerApiKey,
     fetchImpl,
     activityPageSize: opts.explorerActivityPageSize,
+    getLatestBlock: () => rpc.getBlockNumber(),
   });
   const addrLower = address.toLowerCase(); // normalized for calls/comparisons
 

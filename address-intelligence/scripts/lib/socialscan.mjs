@@ -1,5 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 9_000;
 const DEFAULT_ACTIVITY_PAGE_SIZE = 100;
+const MAX_ACTIVITY_BLOCK_RANGE = 100_000n;
 
 function unavailable(reason, extra = {}) {
   return { available: false, reason, ...extra };
@@ -25,6 +26,20 @@ function timestampMs(value) {
   }
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+function activityBlockWindow(value) {
+  const endBlock = BigInt(value);
+  if (endBlock < 0n) throw new Error("invalid latest block");
+  const startBlock =
+    endBlock > MAX_ACTIVITY_BLOCK_RANGE
+      ? endBlock - MAX_ACTIVITY_BLOCK_RANGE
+      : 0n;
+  return {
+    startblock: startBlock.toString(),
+    endblock: endBlock.toString(),
+    coversGenesis: startBlock === 0n,
+  };
 }
 
 function transactionKey(transaction, index) {
@@ -78,6 +93,7 @@ export function createSocialScanProvider({
   fetchImpl = fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   activityPageSize = DEFAULT_ACTIVITY_PAGE_SIZE,
+  getLatestBlock,
 } = {}) {
   const missingReason = !baseUrl
     ? "no SocialScan API configured"
@@ -140,12 +156,16 @@ export function createSocialScanProvider({
   async function activity(address) {
     if (missingReason) return unavailable(missingReason);
     try {
+      if (typeof getLatestBlock !== "function") {
+        throw new Error("missing latest block provider");
+      }
+      const blockWindow = activityBlockWindow(await getLatestBlock());
       const baseParams = {
         module: "account",
         action: "txlist",
         address,
-        startblock: 0,
-        endblock: 99_999_999,
+        startblock: blockWindow.startblock,
+        endblock: blockWindow.endblock,
         page: 1,
         offset: activityPageSize,
       };
@@ -198,7 +218,9 @@ export function createSocialScanProvider({
       return {
         available: true,
         historyComplete:
-          oldest.length < activityPageSize && newest.length < activityPageSize,
+          blockWindow.coversGenesis &&
+          oldest.length < activityPageSize &&
+          newest.length < activityPageSize,
         firstSeen,
         lastSeen,
         txCount: items.length,

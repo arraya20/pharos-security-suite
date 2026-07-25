@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Rpc } from "./lib/rpc.mjs";
 import { createSocialScanProvider } from "./lib/socialscan.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +30,7 @@ const address =
 const provider = createSocialScanProvider({
   baseUrl: network.explorerApiUrl,
   apiKey,
+  getLatestBlock: () => new Rpc(network.rpcUrl).getBlockNumber(),
 });
 const activity = await provider.activity(address);
 

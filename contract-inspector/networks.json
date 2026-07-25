@@ -1,0 +1,17 @@
+{
+  "testnet": {
+    "name": "Pharos Atlantic Testnet",
+    "chainId": 688689,
+    "rpc": "https://atlantic.dplabs-internal.com",
+    "wss": "wss://atlantic.dplabs-internal.com",
+    "explorer": "https://atlantic.pharosscan.xyz",
+    "nativeSymbol": "PHRS"
+  },
+  "mainnet": {
+    "name": "Pharos Pacific Mainnet",
+    "chainId": 1672,
+    "rpc": "https://rpc.pharos.xyz",
+    "explorer": "https://www.pharosscan.xyz",
+    "nativeSymbol": "PROS"
+  }
+}

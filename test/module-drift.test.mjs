@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  checkDocumentation,
   checkModules,
   validateManifest,
 } from "../scripts/check-module-drift.mjs";
@@ -56,5 +57,14 @@ test("the checked-in module snapshots match their locked subtree commits", () =>
   assert.deepEqual(checkModules({ root: ROOT, manifest }), {
     ok: true,
     checked: ["skill-inspector", "contract-inspector", "address-intelligence"],
+  });
+});
+
+test("suite documentation matches module versions, licenses, and roadmap state", () => {
+  assert.deepEqual(checkDocumentation({ root: ROOT }), {
+    skillInspector: "0.1.0",
+    contractInspector: "1.1.0",
+    addressIntelligence: "0.1.0",
+    trustLayer: "roadmap",
   });
 });

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pharos Security Suite — Modular security toolkit for Pharos Network</title>
-<meta name="description" content="Skill inspection, contract introspection & address intelligence for AI agents on Pharos Pacific Mainnet. Deterministic, zero-dependency, mainnet-first.">
+<meta name="description" content="Skill inspection, contract introspection &amp; address intelligence for AI agents on Pharos Pacific Mainnet. Deterministic, zero-dependency, mainnet-first.">
 <meta property="og:title" content="Pharos Security Suite">
 <meta property="og:description" content="Modular security toolkit for the Pharos Network ecosystem — for AI agents, smart contracts, and on-chain addresses.">
 <meta property="og:type" content="website">
@@ -102,14 +102,14 @@
 
 <section id="modules">
   <div class="wrap">
-    <div class="eyebrow">Four Modules</div>
+    <div class="eyebrow">Three Production Modules + Roadmap</div>
     <h2>Full-surface security coverage</h2>
-    <p class="sec-sub">Each module is independent — use one, or compose all four into a unified security pipeline for autonomous agents.</p>
+    <p class="sec-sub">Each production module is independently runnable. Cryptographic composition remains a clearly labeled roadmap item.</p>
     <div class="grid">
 
       <div class="card">
         <span class="num">01</span>
-        <h3>Skill Inspector <span class="tag tag-live">v1.0</span> <span class="tag tag-lang">Python</span></h3>
+        <h3>Skill Inspector <span class="tag tag-live">v0.1.0</span> <span class="tag tag-lang">Python</span></h3>
         <p>Detect prompt injection, data leakage, vulnerable dependencies, and on-chain risks in AI agent skills before you install or publish them.</p>
         <ul>
           <li>Zero runtime dependencies (Python 3.10+)</li>
@@ -122,11 +122,11 @@
 
       <div class="card">
         <span class="num">02</span>
-        <h3>Contract Inspector <span class="tag tag-live">v1.1</span> <span class="tag tag-lang">Node.js</span></h3>
+        <h3>Contract Inspector <span class="tag tag-live">v1.1.0</span> <span class="tag tag-lang">Node.js</span></h3>
         <p>Point it at any contract on Pharos and get function inventory, proxy resolution, interface detection, and risk scoring — straight from bytecode.</p>
         <ul>
           <li>ABI-free: works on unverified contracts</li>
-          <li>Proxy detection: EIP-1167/1967, UUPS, OZ</li>
+          <li>EIP-1967 implementation/beacon + confirmed UUPS</li>
           <li>Fingerprint: ERC-20/721/1155, Ownable, Pausable</li>
           <li>CLI + HTTP API for agent integration</li>
         </ul>
@@ -135,20 +135,20 @@
 
       <div class="card">
         <span class="num">03</span>
-        <h3>Address Intelligence <span class="tag tag-live">v1.0</span> <span class="tag tag-lang">Node.js</span></h3>
+        <h3>Address Intelligence <span class="tag tag-live">v0.1.0</span> <span class="tag tag-lang">Node.js</span></h3>
         <p>EOA vs contract detection, native + ERC-20 holdings, behavioral classification, and a deterministic 0–100 risk score — from on-chain data.</p>
         <ul>
           <li>RPC-only mode works when explorer is down</li>
           <li>Classification: Whale/Bot/MEV/Dormant, etc.</li>
           <li>Risk levels: LOW → CRITICAL</li>
-          <li>Graceful degradation with confidence flags</li>
+          <li>SocialScan enrichment + confidence flags</li>
         </ul>
         <a class="link" href="https://github.com/arraya20/pharos-security-suite/tree/main/address-intelligence">Full docs →</a>
       </div>
 
       <div class="card">
         <span class="num">04</span>
-        <h3>Agent Trust Layer <span class="tag tag-plan">planned</span></h3>
+        <h3>Agent Trust Layer <span class="tag tag-plan">roadmap</span></h3>
         <p>Cryptographic attestation engine that seals audit results from modules 1–3 with verifiable signatures — agent-to-agent trust without a central authority.</p>
         <ul>
           <li>Signed attestations (SHA-256 + Ed25519)</li>
@@ -173,11 +173,11 @@ git clone https://github.com/arraya20/pharos-security-suite.git
 cd pharos-security-suite
 
 <span class="c"># Module 2 — inspect a live mainnet contract</span>
-cd contract-inspector &amp;&amp; npm install
+cd contract-inspector &amp;&amp; npm ci
 node inspect.js <span class="p">0x000000000022D473030F116dDEE9F6B43aC78BA3</span> --network mainnet
 
 <span class="c"># Module 3 — profile any address</span>
-cd ../address-intelligence &amp;&amp; npm install
+cd ../address-intelligence &amp;&amp; npm ci
 node scripts/inspect.mjs <span class="p">0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2</span> --network mainnet</pre>
   </div>
 </section>
@@ -185,8 +185,8 @@ node scripts/inspect.mjs <span class="p">0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec65
 <section>
   <div class="wrap">
     <div class="eyebrow">Architecture</div>
-    <h2>How the modules compose</h2>
-    <p class="sec-sub">On-chain data flows up through the inspectors into the trust layer; skill screening guards the agent's inputs.</p>
+    <h2>Current modules and future composition</h2>
+    <p class="sec-sub">The three inspectors run independently today. Signed cross-module composition is planned, not yet available.</p>
     <div class="arch">
 <pre>          ┌──────────────────────────────┐
           │      Pharos Mainnet RPC      │
@@ -197,14 +197,17 @@ node scripts/inspect.mjs <span class="p">0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec65
           │  Inspector │   │Intelligence│
           └───────┬────┘   └─────┬──────┘
                   └──────┬───────┘
-                  ┌──────▼──────┐
-                  │ Trust Layer │
-                  │(attestation)│
-                  └──────┬──────┘
-          ┌──────────────▼──────────────┐
-          │       Skill Inspector       │
-          │   (agent input screening)   │
-          └─────────────────────────────┘</pre>
+                         │ future
+                 ┌───────▼─────────────┐
+                 │ Signed trust layer  │
+                 │ (roadmap only)      │
+                 └─────────────────────┘
+
+          ┌─────────────────────────────┐
+          │ Skill Inspector             │
+          │ (independent pre-screening) │
+          └─────────────────────────────┘
+</pre>
     </div>
   </div>
 </section>
@@ -213,9 +216,10 @@ node scripts/inspect.mjs <span class="p">0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec65
   <div class="wrap">
     <div class="eyebrow">Design Principles</div>
     <h2>Why it's built this way</h2>
-    <p class="sec-sub"></p>
+    <p class="sec-sub">Small, reviewable tools with explicit provenance and conservative failure modes.</p>
     <div class="principles">
-      <div class="principle"><h4>Modular</h4><p>Each tool is independent. Use one, or compose all four.</p></div>
+      <div class="principle"><h4>Modular</h4><p>Each production tool is independently runnable.</p></div>
+      <div class="principle"><h4>Reproducible</h4><p>Canonical upstream commits are pinned and checked for drift.</p></div>
       <div class="principle"><h4>Minimal deps</h4><p>Zero/minimal dependencies to shrink the supply-chain attack surface.</p></div>
       <div class="principle"><h4>Mainnet-first</h4><p>Built for Pharos Pacific Mainnet, not just testnet demos.</p></div>
       <div class="principle"><h4>Deterministic</h4><p>Fixed-rule pattern matching. No LLM hallucinations.</p></div>
@@ -247,7 +251,7 @@ node scripts/inspect.mjs <span class="p">0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec65
       <a href="https://pharos.xyz">Pharos Network</a>
     </div>
     <p>Built by <b>Namri</b> · Pharos Skill Builder Campaign winner · Active mainnet contributor</p>
-    <p style="margin-top:8px;opacity:.6">MIT License — see individual module licenses.</p>
+    <p style="margin-top:8px;opacity:.6">MIT-0 — see the root and individual module licenses.</p>
   </div>
 </footer>
 

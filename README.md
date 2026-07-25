@@ -1,8 +1,12 @@
 # Pharos Security Suite
 
+[![CI](https://github.com/arraya20/pharos-security-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/arraya20/pharos-security-suite/actions/workflows/ci.yml)
+
 **Modular security toolkit for the Pharos Network ecosystem.**
 
-Four independent modules that cover the full security surface for AI agents, smart contracts, and on-chain addresses on Pharos Pacific Mainnet.
+Three production modules cover AI-agent skills, smart contracts, and on-chain
+addresses on Pharos Pacific Mainnet. A cryptographic trust layer remains on the
+roadmap.
 
 ```
 pharos-security-suite/
@@ -16,7 +20,7 @@ pharos-security-suite/
 
 ## Modules
 
-### 1. Skill Inspector `v1.0` — Python
+### 1. Skill Inspector `v0.1.0` — Python
 
 > Detect prompt injection, data leakage, vulnerable dependencies, dangerous code, and on-chain risks in Pharos AI agent skills *before* you install or publish them.
 
@@ -36,19 +40,19 @@ pharos-skill-inspector scan https://github.com/owner/some-skill
 
 ---
 
-### 2. Contract Inspector `v1.1` — Node.js
+### 2. Contract Inspector `v1.1.0` — Node.js
 
 > Point it at any contract on Pharos and get function inventory, proxy resolution, interface detection, and risk scoring — straight from bytecode, no verified source required.
 
 - ABI-free: works on any deployed contract, even unverified
-- Proxy detection: EIP-1167, EIP-1967, UUPS, OZ legacy
+- Proxy detection: EIP-1167, EIP-1967 implementation/beacon, confirmed UUPS, OZ legacy
 - Standard fingerprinting: ERC-20/721/1155, Ownable, AccessControl, Pausable
 - Privileged function flagging: mint, pause, upgradeTo, DELEGATECALL, SELFDESTRUCT
 - Deterministic risk scoring (Low/Medium/High)
 - CLI + HTTP API for agent integration
 
 ```bash
-cd contract-inspector && npm install
+cd contract-inspector && npm ci
 node inspect.js 0x000000000022D473030F116dDEE9F6B43aC78BA3 --network mainnet
 ```
 
@@ -56,18 +60,18 @@ node inspect.js 0x000000000022D473030F116dDEE9F6B43aC78BA3 --network mainnet
 
 ---
 
-### 3. Address Intelligence `v1.0` — Node.js
+### 3. Address Intelligence `v0.1.0` — Node.js
 
 > Point it at any address on Pharos and get: EOA vs contract detection, native + ERC-20 holdings, behavioral classification, and a deterministic 0–100 risk score — straight from on-chain data. No private key, no gas.
 
 - RPC-only mode works even when explorer API is down
 - Classification: New/Casual/Active/Whale/Bot/MEV/Dormant (EOA) or Token/DEX/Protocol (contract)
 - Risk levels: LOW → MODERATE → ELEVATED → HIGH → CRITICAL
-- Graceful degradation: partial confidence + uncertainty penalty when explorer unavailable
+- SocialScan enrichment with explicit partial confidence when history is sampled or unavailable
 - Token holdings verified against official Pharos token registry
 
 ```bash
-cd address-intelligence && npm install
+cd address-intelligence && npm ci
 node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
 ```
 
@@ -75,7 +79,7 @@ node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network ma
 
 ---
 
-### 4. Agent Trust Layer `planned`
+### Roadmap: Agent Trust Layer
 
 > Cryptographic attestation engine that seals audit results from modules 1-3 with verifiable signatures, enabling agent-to-agent trust without centralized authorities.
 
@@ -101,19 +105,12 @@ Planned features:
     └──────┬──────┘       └──────┬──────┘
            │                      │
            └──────────┬───────────┘
-                      │
-              ┌───────▼───────┐
-              │  Trust Layer  │
-              │ (attestation) │
-              └───────┬───────┘
-                      │
-    ┌─────────────────▼─────────────────┐
-    │         Skill Inspector           │
-    │    (agent skill pre-screening)    │
-    └───────────────────────────────────┘
+           ┌──────────▼───────────┐
+           │ Future Trust Layer   │
+           │ (not yet available)  │
+           └──────────────────────┘
 
-    ↓ All modules feed into unified security reports
-    ↓ Attestations are signed & optionally posted on-chain
+    Skill Inspector currently runs independently as an agent pre-screen.
 ```
 
 ## Quick Start
@@ -122,22 +119,52 @@ Planned features:
 git clone https://github.com/arraya20/pharos-security-suite.git
 cd pharos-security-suite
 
-# Module 1: Skill Inspector
+# Module 1: Skill Inspector (Python 3.10+)
 cd skill-inspector && python3 -m venv .venv && source .venv/bin/activate
-pip install -e . && pharos-skill-inspector scan ./examples/
+pip install -e .
+pharos-skill-inspector scan examples/benign-skill --no-network
+pharos-skill-inspector scan examples/malicious-skill --no-network
 
-# Module 2: Contract Inspector
-cd ../contract-inspector && npm install
+# Module 2: Contract Inspector (Node.js 22+)
+cd ../contract-inspector && npm ci
 node inspect.js 0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B --network mainnet
 
-# Module 3: Address Intelligence
-cd ../address-intelligence && npm install
+# Module 3: Address Intelligence (Node.js 22+)
+cd ../address-intelligence && npm ci
 node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
 ```
 
+For SocialScan enrichment, configure `SOCIALSCAN_API_KEY`. Without it, Address
+Intelligence still returns RPC-based signals with explicit partial confidence.
+
+## Module provenance and updates
+
+The three module directories are Git subtrees pinned in
+[`modules.lock.json`](modules.lock.json). Verify that their contents match the
+recorded upstream commits:
+
+```bash
+npm ci
+npm test
+npm run check:modules
+```
+
+To update one module, start from a clean worktree:
+
+```bash
+npm run sync:module -- skill-inspector
+npm run sync:module -- contract-inspector
+npm run sync:module -- address-intelligence
+```
+
+The sync command performs a reviewed subtree pull and updates the corresponding
+lock SHA. Run the full root CI commands before committing the update. See
+[`docs/module-sync-design.md`](docs/module-sync-design.md) for the decision log.
+
 ## Design Principles
 
-- **Modular** — each tool is independent, use one or compose all four
+- **Modular** — each production tool is independently runnable
+- **Reproducible** — upstream commits are pinned and checked for content drift
 - **Zero/minimal dependencies** — reduce supply-chain attack surface
 - **Mainnet-first** — built for Pharos Pacific Mainnet, not just testnet demos
 - **Deterministic** — no LLM hallucinations, pattern-matching with fixed rules
@@ -162,4 +189,5 @@ Built for [Pharos Network](https://pharos.xyz) — an EVM-compatible L1 with nat
 
 ## License
 
-MIT — see individual module licenses.
+MIT-0 (No Attribution Required). The root distribution and all three pinned
+modules use MIT-0; see each module's `LICENSE` file.

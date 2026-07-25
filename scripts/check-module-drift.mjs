@@ -132,12 +132,75 @@ export function checkModules({ root = ROOT, manifest }) {
   return { ok: true, checked };
 }
 
+function requireText(text, expected, source) {
+  if (!text.includes(expected)) {
+    throw new Error(`${source} is missing expected text: ${expected}`);
+  }
+}
+
+export function checkDocumentation({ root = ROOT }) {
+  const read = (relativePath) =>
+    fs.readFileSync(path.join(root, relativePath), "utf8");
+  const skillProject = read("skill-inspector/pyproject.toml");
+  const skillVersion = skillProject.match(/^version\s*=\s*"([^"]+)"$/m)?.[1];
+  if (!skillVersion) throw new Error("Unable to read Skill Inspector version");
+
+  const contractVersion = JSON.parse(
+    read("contract-inspector/package.json")
+  ).version;
+  const addressVersion = JSON.parse(
+    read("address-intelligence/package.json")
+  ).version;
+  const readme = read("README.md");
+  const homepage = read("docs/index.html");
+
+  const expectedVersions = [
+    ["Skill Inspector", skillVersion],
+    ["Contract Inspector", contractVersion],
+    ["Address Intelligence", addressVersion],
+  ];
+  for (const [name, version] of expectedVersions) {
+    requireText(readme, `${name} \`v${version}\``, "README.md");
+    requireText(homepage, `${name} <span class="tag tag-live">v${version}</span>`, "docs/index.html");
+  }
+
+  for (const licensePath of [
+    "LICENSE",
+    "skill-inspector/LICENSE",
+    "contract-inspector/LICENSE",
+    "address-intelligence/LICENSE",
+  ]) {
+    if (!read(licensePath).startsWith("MIT No Attribution\n")) {
+      throw new Error(`${licensePath} must use MIT-0 text`);
+    }
+  }
+
+  if (fs.existsSync(path.join(root, "trust-layer"))) {
+    throw new Error("Trust layer exists but documentation still marks it as roadmap");
+  }
+  requireText(readme, "### Roadmap: Agent Trust Layer", "README.md");
+  requireText(
+    homepage,
+    'Agent Trust Layer <span class="tag tag-plan">roadmap</span>',
+    "docs/index.html"
+  );
+
+  return {
+    skillInspector: skillVersion,
+    contractInspector: contractVersion,
+    addressIntelligence: addressVersion,
+    trustLayer: "roadmap",
+  };
+}
+
 function main() {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(ROOT, "modules.lock.json"), "utf8")
   );
   const result = checkModules({ root: ROOT, manifest });
+  checkDocumentation({ root: ROOT });
   console.log(`Module drift check passed: ${result.checked.join(", ")}`);
+  console.log("Documentation metadata check passed");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

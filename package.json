@@ -1,0 +1,16 @@
+{
+  "name": "pharos-security-suite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clone-ready distribution of the Pharos security inspection tools.",
+  "license": "MIT-0",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check:modules": "node scripts/check-module-drift.mjs",
+    "sync:module": "node scripts/sync-module.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

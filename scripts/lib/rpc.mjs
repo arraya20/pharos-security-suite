@@ -99,6 +99,10 @@ export class Rpc {
     return this.call("eth_getBalance", [addr, block]);
   }
 
+  getBlockNumber() {
+    return this.call("eth_blockNumber");
+  }
+
   chainId() {
     return this.call("eth_chainId");
   }

@@ -65,6 +65,7 @@ test("maps sampled transaction activity conservatively", async () => {
     baseUrl: BASE_URL,
     apiKey: "test-secret",
     activityPageSize: 2,
+    getLatestBlock: async () => 100_000,
     fetchImpl: async (url) => {
       const parsed = new URL(url);
       calls.push(parsed);
@@ -123,6 +124,32 @@ test("maps sampled transaction activity conservatively", async () => {
     { address: destination, name: "Protocol Router", verified: true },
   ]);
   assert.equal(calls.filter((url) => url.searchParams.get("action") === "txlist").length, 2);
+});
+
+test("limits activity requests to SocialScan's 100,000-block window", async () => {
+  const calls = [];
+  const provider = createSocialScanProvider({
+    baseUrl: BASE_URL,
+    apiKey: "test-secret",
+    getLatestBlock: async () => 250_000,
+    fetchImpl: async (url) => {
+      calls.push(new URL(url));
+      return response([]);
+    },
+  });
+
+  const activity = await provider.activity(ADDRESS);
+  const activityCalls = calls.filter(
+    (url) => url.searchParams.get("action") === "txlist"
+  );
+
+  assert.equal(activity.available, true);
+  assert.equal(activity.historyComplete, false);
+  assert.equal(activityCalls.length, 2);
+  for (const url of activityCalls) {
+    assert.equal(url.searchParams.get("startblock"), "150000");
+    assert.equal(url.searchParams.get("endblock"), "250000");
+  }
 });
 
 test("maps discovered ERC-20 balances and rejects malformed entries", async () => {

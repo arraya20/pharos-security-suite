@@ -1,0 +1,43 @@
+name: Explorer smoke
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  socialscan:
+    name: SocialScan (${{ matrix.network }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        network: [atlantic_testnet, pacific_mainnet]
+    defaults:
+      run:
+        working-directory: address-intelligence
+    env:
+      SOCIALSCAN_API_KEY: ${{ secrets.SOCIALSCAN_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: address-intelligence/package-lock.json
+
+      - run: npm ci
+
+      - name: Require SocialScan credential
+        run: |
+          if [ -z "$SOCIALSCAN_API_KEY" ]; then
+            echo "::error::Configure the SOCIALSCAN_API_KEY repository secret"
+            exit 1
+          fi
+
+      - run: npm run smoke:explorer -- ${{ matrix.network }}

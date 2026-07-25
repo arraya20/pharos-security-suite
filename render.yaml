@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: pharos-address-intelligence
+    runtime: node
+    plan: free
+    buildCommand: npm test
+    startCommand: npm run serve
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: HOST
+        value: 0.0.0.0
+      - key: RATE_LIMIT_MAX
+        value: 60
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 60000
+      - key: MAX_BODY_BYTES
+        value: 32768
+      - key: REQUEST_TIMEOUT_MS
+        value: 20000
+      - key: CACHE_TTL_MS
+        value: 15000
+      - key: TRUST_PROXY
+        value: true

@@ -11,6 +11,7 @@ const RISK_LEVELS = new Set([
   "CRITICAL",
 ]);
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const SKILL_REF_RE = /^artifact:[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function assertObject(value, name) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -61,7 +62,10 @@ export function validateAssessmentRequest(input) {
     throw new TypeError("network must be mainnet or testnet");
   }
   if (input.target.skillRef !== undefined) {
-    assertNonEmptyString(input.target.skillRef, "skillRef", 2048);
+    assertNonEmptyString(input.target.skillRef, "skillRef", 128);
+    if (!SKILL_REF_RE.test(input.target.skillRef)) {
+      throw new TypeError("skillRef must be an artifact reference, not a remote URL");
+    }
   }
 
   if (input.options !== undefined) {

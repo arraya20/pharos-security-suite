@@ -43,6 +43,39 @@ test("routes single target types only to their specialist", async () => {
   assert.deepEqual(result.risk, { score: 25, level: "MODERATE" });
 });
 
+test("derives a stable risk level when a specialist returns only a score", async () => {
+  const coordinator = createCoordinator({
+    adapters: {
+      skill: adapter("skill-inspector", "0.1.0", async () => ({
+        score: 55,
+        findings: [],
+      })),
+    },
+  });
+
+  const result = await coordinator.assess(
+    request("SKILL", { skillRef: "artifact:skill-1" })
+  );
+
+  assert.deepEqual(result.risk, { score: 55, level: "ELEVATED" });
+});
+
+test("replaces an unsupported specialist risk label with the score-derived level", async () => {
+  const coordinator = createCoordinator({
+    adapters: {
+      contract: adapter("contract-inspector", "1.1.0", async () => ({
+        risk: { score: 55, level: "SEVERE" },
+      })),
+    },
+  });
+
+  const result = await coordinator.assess(
+    request("CONTRACT", { address: ADDRESS, network: "mainnet" })
+  );
+
+  assert.deepEqual(result.risk, { score: 55, level: "ELEVATED" });
+});
+
 test("runs relevant FULL specialists concurrently and aggregates worst risk", async () => {
   let inFlight = 0;
   let maxInFlight = 0;
@@ -162,6 +195,29 @@ test("coalesces concurrent identical requests and serves later cache hits", asyn
   assert.equal(third.details.cache.status, "HIT");
 });
 
+test("does not coalesce identical requests with different deadline budgets", async () => {
+  let calls = 0;
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return { risk: { score: 5, level: "LOW" }, confidence: "full" };
+      }),
+    },
+  });
+  const target = { address: ADDRESS, network: "mainnet" };
+
+  const [longBudget, shortBudget] = await Promise.all([
+    coordinator.assess(request("ADDRESS", target, { deadlineMs: 500 })),
+    coordinator.assess(request("ADDRESS", target, { deadlineMs: 100 })),
+  ]);
+
+  assert.equal(calls, 2);
+  assert.equal(longBudget.status, "COMPLETE");
+  assert.equal(shortBudget.status, "TIMEOUT");
+});
+
 test("bounded TTL cache evicts least-recently-used values and expires entries", () => {
   let now = 100;
   const cache = new BoundedTtlCache({ maxEntries: 2, now: () => now });
@@ -185,4 +241,34 @@ test("adapter definitions require stable module metadata and an assess function"
     () => defineAdapter({ module: "broken", version: "1.0.0" }),
     /assess must be a function/i
   );
+});
+
+test("bounds concurrently executing assessments", async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        inFlight -= 1;
+        return { risk: { score: 1, level: "LOW" }, confidence: "full" };
+      }),
+    },
+    maxConcurrentAssessments: 2,
+  });
+
+  await Promise.all(
+    Array.from({ length: 6 }, (_, index) =>
+      coordinator.assess(
+        request("ADDRESS", {
+          address: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+          network: "mainnet",
+        })
+      )
+    )
+  );
+
+  assert.equal(maxInFlight, 2);
 });

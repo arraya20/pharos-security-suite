@@ -7,6 +7,9 @@
   "license": "MIT-0",
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "lint": "find coordinator scripts test -type f -name '*.mjs' -exec node --check {} +",
+    "benchmark": "node scripts/benchmark-coordinator.mjs",
+    "package:coordinator": "node scripts/package-coordinator.mjs",
     "check:modules": "node scripts/check-module-drift.mjs",
     "sync:module": "node scripts/sync-module.mjs"
   },

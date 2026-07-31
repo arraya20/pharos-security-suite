@@ -54,6 +54,24 @@ test("rejects request fields outside the public contract", () => {
   );
 });
 
+test("rejects remote skill references at the coordinator boundary", () => {
+  for (const skillRef of [
+    "https://attacker.example/skill.zip",
+    "artifact:https://attacker.example/skill.zip",
+    "artifact:../../private-key",
+  ]) {
+    assert.throws(
+      () =>
+        validateAssessmentRequest({
+          schemaVersion: "1.0",
+          targetType: "SKILL",
+          target: { skillRef },
+        }),
+      /artifact reference/i
+    );
+  }
+});
+
 test("requires the target implied by targetType", () => {
   assert.throws(
     () =>

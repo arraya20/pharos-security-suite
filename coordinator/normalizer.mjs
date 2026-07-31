@@ -3,6 +3,22 @@ const MODULE_TARGET_TYPES = {
   contract: "CONTRACT",
   skill: "SKILL",
 };
+const SUPPORTED_RISK_LEVELS = new Set([
+  "LOW",
+  "MEDIUM",
+  "MODERATE",
+  "ELEVATED",
+  "HIGH",
+  "CRITICAL",
+]);
+
+function levelFromScore(score) {
+  if (score <= 20) return "LOW";
+  if (score <= 40) return "MODERATE";
+  if (score <= 60) return "ELEVATED";
+  if (score <= 80) return "HIGH";
+  return "CRITICAL";
+}
 
 function riskFrom(raw) {
   const candidate = raw?.risk ||
@@ -10,9 +26,14 @@ function riskFrom(raw) {
       ? { score: raw.score, level: raw.severity || raw.level }
       : null);
   if (!candidate || typeof candidate.score !== "number") return null;
+  const normalizedLevel = candidate.level
+    ? String(candidate.level).toUpperCase()
+    : null;
   return {
     score: Math.max(0, Math.min(100, candidate.score)),
-    level: String(candidate.level || "UNKNOWN").toUpperCase(),
+    level: SUPPORTED_RISK_LEVELS.has(normalizedLevel)
+      ? normalizedLevel
+      : levelFromScore(candidate.score),
   };
 }
 

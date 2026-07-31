@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pharos Security Coordinator"
+  short_description: "Route modular Pharos security assessments"
+  default_prompt: "Use $pharos-security-coordinator to run the relevant Pharos security specialists for this target."

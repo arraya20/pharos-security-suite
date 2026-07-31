@@ -25,9 +25,12 @@ jobs:
 
       - run: npm ci
       - run: npm test
+      - run: npm run lint
+      - run: npm run benchmark
+      - run: npm run package:coordinator
+      - run: unzip -t dist/pharos-security-coordinator.zip
       - run: npm run check:modules
-      - run: node --check scripts/check-module-drift.mjs
-      - run: node --check scripts/sync-module.mjs
+      - run: npm audit --audit-level=high
 
   skill-inspector:
     name: Skill Inspector (Python ${{ matrix.python-version }})

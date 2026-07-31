@@ -4,15 +4,17 @@
 
 **Modular security toolkit for the Pharos Network ecosystem.**
 
-Three production modules cover AI-agent skills, smart contracts, and on-chain
-addresses on Pharos Pacific Mainnet. A cryptographic trust layer remains on the
-roadmap.
+Three production specialists cover AI-agent skills, smart contracts, and
+on-chain addresses on Pharos Pacific Mainnet. A portable coordinator composes
+them behind one stable assessment contract. A cryptographic trust layer remains
+on the roadmap.
 
 ```
 pharos-security-suite/
 ├── skill-inspector/        → Scan AI agent skills for prompt injection & Web3 risks
 ├── contract-inspector/     → ABI-free bytecode introspection & risk scoring
 ├── address-intelligence/   → Address profiling, classification & risk scoring
+├── coordinator/            → Route, parallelize & normalize specialist reports
 └── trust-layer/            → Cryptographic attestation for audit results (planned)
 ```
 
@@ -79,6 +81,43 @@ node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network ma
 
 ---
 
+### 4. Security Coordinator `v0.1.0` — Node.js
+
+> Route one request to the smallest relevant specialist set and return a stable,
+> normalized assessment envelope.
+
+- Runs independent specialists concurrently for `FULL` assessments
+- Enforces one shared deadline and propagates cancellation to Node RPC calls
+- Returns successful evidence as `PARTIAL` when another specialist fails
+- Coalesces identical in-flight work and keeps a bounded TTL/LRU result cache
+- Bounds concurrent assessments to protect the host and upstream providers
+- Accepts platform artifact references only; arbitrary skill URLs are rejected
+
+```js
+import { createCoordinator } from "./coordinator/index.mjs";
+import { createLocalNodeAdapters } from "./coordinator/local-node-adapters.mjs";
+
+const coordinator = createCoordinator({
+  adapters: createLocalNodeAdapters(),
+  defaultDeadlineMs: 8000,
+  maxConcurrentAssessments: 5,
+});
+
+const report = await coordinator.assess({
+  schemaVersion: "1.0",
+  targetType: "FULL",
+  target: {
+    address: "0x0000000000000000000000000000000000000001",
+    network: "mainnet",
+  },
+});
+```
+
+The public request/result schemas live in [`contracts/`](contracts/). Package
+the Anvita-facing coordinator artifact with `npm run package:coordinator`.
+
+---
+
 ### Roadmap: Agent Trust Layer
 
 > Cryptographic attestation engine that seals audit results from modules 1-3 with verifiable signatures, enabling agent-to-agent trust without centralized authorities.
@@ -94,24 +133,25 @@ Planned features:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Pharos Mainnet RPC                  │
-└──────────┬──────────────────────┬────────────────────┘
-           │                      │
-    ┌──────▼──────┐       ┌──────▼──────┐
-    │  Contract   │       │   Address   │
-    │  Inspector  │       │ Intelligence│
-    │  (bytecode) │       │  (history)  │
-    └──────┬──────┘       └──────┬──────┘
-           │                      │
-           └──────────┬───────────┘
-           ┌──────────▼───────────┐
-           │ Future Trust Layer   │
-           │ (not yet available)  │
-           └──────────────────────┘
-
-    Skill Inspector currently runs independently as an agent pre-screen.
+             ┌───────────────────────────┐
+             │   Security Coordinator    │
+             │ route · deadline · cache  │
+             └──────┬────────┬───────────┘
+                    │        │
+       ┌────────────┘        └────────────┐
+┌──────▼──────┐  ┌──────────▼─────┐  ┌───▼──────────┐
+│    Skill    │  │    Contract    │  │   Address    │
+│  Inspector  │  │    Inspector   │  │ Intelligence │
+└─────────────┘  └────────┬───────┘  └──────┬───────┘
+                          │                 │
+                   ┌──────▼─────────────────▼──────┐
+                   │ Pinned-block resilient RPCs  │
+                   └───────────────────────────────┘
 ```
+
+Each specialist remains independently deployable. The coordinator depends only
+on the adapter contract, so Anvita can run specialists as separate Service
+Agents without changing assessment schemas or aggregation behavior.
 
 ## Quick Start
 
@@ -132,10 +172,30 @@ node inspect.js 0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B --network mainnet
 # Module 3: Address Intelligence (Node.js 22+)
 cd ../address-intelligence && npm ci
 node scripts/inspect.mjs 0x126cC4E8f6c24fdBe65e07AA8CaDB6dB1ec655e2 --network mainnet
+
+# Coordinator checks, local load benchmark, and portable artifact
+cd ..
+npm test
+npm run benchmark
+npm run package:coordinator
 ```
 
 For SocialScan enrichment, configure `SOCIALSCAN_API_KEY`. Without it, Address
 Intelligence still returns RPC-based signals with explicit partial confidence.
+
+## Runtime behavior
+
+Contract and address reads first pin a block number, then issue independent RPC
+calls concurrently against that snapshot. Their provider pools support hedging,
+transient-error failover, and circuit-breaker cooldowns. Deterministic RPC errors
+are returned directly instead of being retried against every provider.
+
+The coordinator defaults to an 8-second shared deadline, 15-second result cache,
+500 cache entries, and five concurrent assessments. These are constructor
+settings—not assumptions about the Anvita host—so deployment can tune them after
+measuring the platform's CPU, memory, network locality, and Service Agent limits.
+The included synthetic benchmark asserts local coordinator overhead remains far
+below its 500 ms p95 guardrail; it does not claim RPC latency for Anvita.
 
 ## Module provenance and updates
 

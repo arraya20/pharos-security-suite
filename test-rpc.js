@@ -175,3 +175,22 @@ console.log("rpc tests passed");
   await assert.rejects(() => pool.call("eth_call", []), /execution reverted/);
   assert.equal(secondaryCalls, 0);
 }
+
+{
+  const controller = new AbortController();
+  const rpc = new Rpc("https://rpc.example", {
+    retries: 0,
+    signal: controller.signal,
+    fetchImpl: async (_url, options) =>
+      new Promise((_, reject) => {
+        options.signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      }),
+  });
+  const pending = rpc.getBlockNumber();
+  controller.abort();
+  await assert.rejects(() => pending, /RPC aborted/i);
+}

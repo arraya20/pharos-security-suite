@@ -119,7 +119,7 @@ export async function analyzeAddress(address, networkKey = "atlantic_testnet", o
   if (!isValidAddress(address)) throw new Error(`Invalid address "${address}" — expected 0x + 40 hex chars`);
 
   const rpc = opts.rpc || createRpcClient(net, {
-    rpcOptions: opts.rpcOptions,
+    rpcOptions: { ...(opts.rpcOptions || {}), signal: opts.signal || null },
     poolOptions: opts.rpcPoolOptions,
   });
   const explorerApiKey =

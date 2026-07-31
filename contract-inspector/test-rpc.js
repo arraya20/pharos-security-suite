@@ -3,7 +3,7 @@
 // Mocks global fetch so we can control transient vs permanent failures.
 
 import assert from "node:assert/strict";
-import { Rpc } from "./lib/rpc.js";
+import { Rpc, RpcPool } from "./lib/rpc.js";
 
 const origFetch = globalThis.fetch;
 
@@ -116,3 +116,62 @@ function restore() { globalThis.fetch = origFetch; }
 }
 
 console.log("rpc tests passed");
+
+{
+  let primaryCalls = 0;
+  let secondaryCalls = 0;
+  const pool = new RpcPool(
+    [
+      {
+        label: "primary",
+        call: async () => {
+          primaryCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          return "primary";
+        },
+      },
+      {
+        label: "secondary",
+        call: async () => {
+          secondaryCalls += 1;
+          return "secondary";
+        },
+      },
+    ],
+    { hedgeDelayMs: 5 },
+  );
+  assert.equal(await pool.call("eth_blockNumber"), "secondary");
+  assert.equal(primaryCalls, 1);
+  assert.equal(secondaryCalls, 1);
+}
+
+{
+  const timeout = new Error("timeout");
+  timeout.transient = true;
+  const pool = new RpcPool(
+    [
+      { label: "primary", call: async () => Promise.reject(timeout) },
+      { label: "secondary", call: async () => "ok" },
+    ],
+    { hedgeDelayMs: 1000 },
+  );
+  assert.equal(await pool.call("eth_getCode", []), "ok");
+}
+
+{
+  let secondaryCalls = 0;
+  const permanent = new Error("execution reverted");
+  permanent.transient = false;
+  const pool = new RpcPool([
+    { label: "primary", call: async () => Promise.reject(permanent) },
+    {
+      label: "secondary",
+      call: async () => {
+        secondaryCalls += 1;
+        return "unexpected";
+      },
+    },
+  ]);
+  await assert.rejects(() => pool.call("eth_call", []), /execution reverted/);
+  assert.equal(secondaryCalls, 0);
+}

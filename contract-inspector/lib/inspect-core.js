@@ -1,7 +1,7 @@
 // inspect-core.js — reusable inspection pipeline for CLI and HTTP API.
 
 import { readFileSync } from "fs";
-import { Rpc } from "./rpc.js";
+import { Rpc, createRpcClient } from "./rpc.js";
 import { disassemble } from "./disasm.js";
 import { KNOWN, PRIVILEGED, FINGERPRINTS, INTERFACE_IDS } from "./signatures.js";
 import { resolveProxy } from "./proxy.js";
@@ -41,20 +41,35 @@ export function detectStandards(selectors, interfaces = [], implementationSelect
   return standards;
 }
 
-export async function inspectContract({ address, network = "testnet", rpcUrl = null, online = true }) {
+export async function inspectContract({
+  address,
+  network = "testnet",
+  rpcUrl = null,
+  online = true,
+  rpc: providedRpc = null,
+  rpcOptions = null,
+  rpcPoolOptions = null,
+}) {
   const networks = loadNetworks();
   const net = networks[network];
   if (!net) throw new Error(`Unknown network: ${network}`);
-  const rpc = new Rpc(rpcUrl || net.rpc);
-  const chainId = assertExpectedChainId(await rpc.chainId(), net.chainId, network);
+  const rpc = providedRpc || (rpcUrl
+    ? new Rpc(rpcUrl, rpcOptions || {})
+    : createRpcClient(net, { rpcOptions, poolOptions: rpcPoolOptions }));
+  const [actualChainId, snapshotBlock] = await Promise.all([
+    rpc.chainId(),
+    rpc.getBlockNumber(),
+  ]);
+  const chainId = assertExpectedChainId(actualChainId, net.chainId, network);
 
-  const codeHex = await rpc.getCode(address);
+  const codeHex = await rpc.getCode(address, snapshotBlock);
   if (!codeHex || codeHex === "0x" || codeHex.length <= 2) {
-    const bal = await rpc.getBalance(address);
+    const bal = await rpc.getBalance(address, snapshotBlock);
     return {
       address,
       network,
       chainId,
+      snapshotBlock,
       type: "EOA",
       balanceWei: BigInt(bal).toString(),
       balanceNative: formatUnits(BigInt(bal), 18),
@@ -63,10 +78,10 @@ export async function inspectContract({ address, network = "testnet", rpcUrl = n
   }
 
   const dis = disassemble(codeHex);
-  const proxy = await resolveProxy(rpc, address, codeHex);
+  const proxy = await resolveProxy(rpc, address, codeHex, snapshotBlock);
   let implDis = null;
   if (proxy.isProxy && proxy.impl) {
-    const implCode = await rpc.getCode(proxy.impl);
+    const implCode = await rpc.getCode(proxy.impl, snapshotBlock);
     if (implCode && implCode !== "0x" && implCode.length > 2) implDis = disassemble(implCode);
   }
 
@@ -87,13 +102,13 @@ export async function inspectContract({ address, network = "testnet", rpcUrl = n
 
   const interfaces = [];
   if (known.some((k) => k.selector === "0x01ffc9a7")) {
-    const probed = await probeInterfaces(rpc, address, INTERFACE_IDS);
+    const probed = await probeInterfaces(rpc, address, INTERFACE_IDS, snapshotBlock);
     for (const p of probed) if (p.supported) interfaces.push(p.name);
   }
 
   const standards = detectStandards(dis.selectors, interfaces, implDis?.selectors || []);
 
-  const meta = await readMetadata(rpc, address);
+  const meta = await readMetadata(rpc, address, snapshotBlock);
 
   const risk = assessRisk({ proxy, dis, implDis, dangerous, standards, meta, resolvedFunctions, unresolvedSelectors });
 
@@ -101,6 +116,7 @@ export async function inspectContract({ address, network = "testnet", rpcUrl = n
     address,
     network,
     chainId,
+    snapshotBlock,
     type: "Contract",
     bytecode: { size: dis.codeSize, head: codeHex.slice(0, 10) },
     proxy: proxy.isProxy

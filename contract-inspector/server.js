@@ -18,6 +18,8 @@ const DEFAULT_RATE_LIMIT_MAX = envNumber("RATE_LIMIT_MAX", 60);
 const DEFAULT_RATE_LIMIT_WINDOW_MS = envNumber("RATE_LIMIT_WINDOW_MS", 60_000);
 const DEFAULT_RATE_LIMIT_MAX_BUCKETS = envNumber("RATE_LIMIT_MAX_BUCKETS", 10_000);
 const DEFAULT_REQUEST_TIMEOUT_MS = envNumber("REQUEST_TIMEOUT_MS", 20_000);
+const DEFAULT_CACHE_TTL_MS = envNumber("CACHE_TTL_MS", 15_000);
+const DEFAULT_CACHE_MAX_ENTRIES = envNumber("CACHE_MAX_ENTRIES", 500);
 const DEFAULT_ALLOW_CUSTOM_RPC = process.env.ALLOW_CUSTOM_RPC === "1";
 
 class ServiceError extends Error {
@@ -116,9 +118,73 @@ export function createServer({
   rateLimitWindowMs = DEFAULT_RATE_LIMIT_WINDOW_MS,
   rateLimitMaxBuckets = DEFAULT_RATE_LIMIT_MAX_BUCKETS,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+  cacheMaxEntries = DEFAULT_CACHE_MAX_ENTRIES,
   allowCustomRpc = DEFAULT_ALLOW_CUSTOM_RPC,
 } = {}) {
   const buckets = new Map();
+  const cache = new Map();
+  const inFlight = new Map();
+
+  function cacheKey(input) {
+    return JSON.stringify({
+      address: input.address.toLowerCase(),
+      network: input.network,
+      rpcUrl: input.rpcUrl,
+      online: input.online,
+    });
+  }
+
+  function cached(key) {
+    const entry = cache.get(key);
+    if (!entry) return null;
+    if (Date.now() >= entry.expiresAt) {
+      cache.delete(key);
+      return null;
+    }
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry.report;
+  }
+
+  function cacheReport(key, report) {
+    cache.delete(key);
+    cache.set(key, { report, expiresAt: Date.now() + cacheTtlMs });
+    while (cache.size > cacheMaxEntries) {
+      cache.delete(cache.keys().next().value);
+    }
+  }
+
+  async function inspectOnce(input) {
+    const key = cacheKey(input);
+    const hit = cached(key);
+    if (hit) return { report: hit, cacheStatus: "HIT" };
+    if (inFlight.has(key)) {
+      return { report: await inFlight.get(key), cacheStatus: "COALESCED" };
+    }
+
+    let timeout;
+    const job = Promise.race([
+      inspect(input),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new ServiceError(504, "inspection_timeout", "Contract inspection timed out")),
+          requestTimeoutMs,
+        );
+        timeout.unref?.();
+      }),
+    ])
+      .then((report) => {
+        cacheReport(key, report);
+        return report;
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        inFlight.delete(key);
+      });
+    inFlight.set(key, job);
+    return { report: await job, cacheStatus: "MISS" };
+  }
 
   function checkRateLimit(req) {
     const now = Date.now();
@@ -145,12 +211,15 @@ export function createServer({
   }
 
   return http.createServer(async (req, res) => {
+    let inspectionStarted = false;
     req.setTimeout(requestTimeoutMs, () => {
-      send(res, 408, {
-        ok: false,
-        error: "request_timeout",
-        message: "Request timed out",
-      });
+      if (!inspectionStarted) {
+        send(res, 408, {
+          ok: false,
+          error: "request_timeout",
+          message: "Request timed out",
+        });
+      }
     });
 
     try {
@@ -182,17 +251,25 @@ export function createServer({
 
       const body = await readJson(req, maxBodyBytes);
       const input = parseInspectPayload(body, allowCustomRpc);
-      let report;
+      inspectionStarted = true;
+      req.setTimeout(0);
+      let inspected;
       try {
-        report = await inspect(input);
-      } catch {
+        inspected = await inspectOnce(input);
+      } catch (error) {
+        if (error instanceof ServiceError) throw error;
         throw new ServiceError(
           502,
           "upstream_error",
           "Contract inspection failed",
         );
       }
-      return send(res, 200, { ok: true, report });
+      return send(
+        res,
+        200,
+        { ok: true, report: inspected.report },
+        { "x-cache": inspected.cacheStatus },
+      );
     } catch (error) {
       if (error instanceof ServiceError) {
         return send(

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RpcPool } from "../scripts/lib/rpc.mjs";
+import { Rpc, RpcPool } from "../scripts/lib/rpc.mjs";
 
 function transient(message) {
   const error = new Error(message);
@@ -96,4 +96,24 @@ test("opens a circuit after repeated transient failures and retries after cooldo
   now += 101;
   assert.equal(await pool.call("eth_chainId"), "ok");
   assert.equal(primaryCalls, 3);
+});
+
+test("propagates an external abort signal into an in-flight RPC request", async () => {
+  const controller = new AbortController();
+  const rpc = new Rpc("https://rpc.example", {
+    retries: 0,
+    signal: controller.signal,
+    fetchImpl: async (_url, options) =>
+      new Promise((_, reject) => {
+        options.signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      }),
+  });
+
+  const pending = rpc.getBlockNumber();
+  controller.abort();
+  await assert.rejects(() => pending, /RPC timeout|aborted/i);
 });

@@ -100,4 +100,73 @@ async function withServer(options, fn) {
   );
 }
 
+{
+  let calls = 0;
+  await withServer(
+    {
+      cacheTtlMs: 60_000,
+      inspect: async () => {
+        calls += 1;
+        return { address: ADDRESS, type: "Contract" };
+      },
+    },
+    async (baseUrl) => {
+      const request = (address) =>
+        fetch(`${baseUrl}/inspect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address }),
+        });
+      assert.equal((await request(ADDRESS)).status, 200);
+      const cached = await request(ADDRESS.toUpperCase().replace("0X", "0x"));
+      assert.equal(cached.status, 200);
+      assert.equal(cached.headers.get("x-cache"), "HIT");
+      assert.equal(calls, 1);
+    },
+  );
+}
+
+{
+  let calls = 0;
+  await withServer(
+    {
+      inspect: async () => {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return { address: ADDRESS, type: "Contract" };
+      },
+    },
+    async (baseUrl) => {
+      const request = () =>
+        fetch(`${baseUrl}/inspect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address: ADDRESS }),
+        });
+      const [first, second] = await Promise.all([request(), request()]);
+      assert.equal(first.status, 200);
+      assert.equal(second.status, 200);
+      assert.equal(calls, 1);
+    },
+  );
+}
+
+{
+  await withServer(
+    {
+      requestTimeoutMs: 5,
+      inspect: async () => new Promise((resolve) => setTimeout(() => resolve({}), 50)),
+    },
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: ADDRESS }),
+      });
+      assert.equal(response.status, 504);
+      assert.equal((await response.json()).error, "inspection_timeout");
+    },
+  );
+}
+
 console.log("server tests passed");

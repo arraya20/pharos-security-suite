@@ -25,6 +25,7 @@ test("formats raw integer token units into decimal strings", () => {
 test("degrades without calling SocialScan when its API key is missing", async () => {
   let explorerCalls = 0;
   const fakeRpc = {
+    getBlockNumber: async () => "0x10",
     getCode: async () => "0x",
     getBalance: async () => "0x0",
     ethCallSafe: async () => ({ ok: true, data: "0x0" }),
@@ -53,6 +54,7 @@ test("degrades without calling SocialScan when its API key is missing", async ()
 
 test("marks the tracked token scan incomplete when an RPC balance call fails", async () => {
   const fakeRpc = {
+    getBlockNumber: async () => "0x10",
     getCode: async () => "0x",
     getBalance: async () => "0x0",
     ethCallSafe: async (tokenAddress) => ({
@@ -73,6 +75,42 @@ test("marks the tracked token scan incomplete when an RPC balance call fails", a
   assert.equal(data.tokenScan.failures[0].symbol, "WPROS");
   assert.match(data.tokenScan.failures[0].reason, /failed 0x/i);
   assert.equal(data.confidence, "partial (token scan incomplete)");
+});
+
+test("pins core RPC reads to one snapshot and starts independent reads concurrently", async () => {
+  const address = "0x0000000000000000000000000000000000000001";
+  const snapshot = "0xabc";
+  const observedBlocks = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const delayed = async (block, value) => {
+    observedBlocks.push(block);
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight -= 1;
+    return value;
+  };
+  const fakeRpc = {
+    getBlockNumber: async () => snapshot,
+    getCode: async (_address, block) => delayed(block, "0x"),
+    getBalance: async (_address, block) => delayed(block, "0x0"),
+    ethCallSafe: async (_token, _data, block) =>
+      delayed(block, { ok: true, data: "0x0" }),
+    call: async (method, params) => {
+      assert.equal(method, "eth_getTransactionCount");
+      return delayed(params[1], "0x0");
+    },
+  };
+
+  const data = await analyzeAddress(address, "pacific_mainnet", {
+    rpc: fakeRpc,
+    offline: true,
+  });
+
+  assert.equal(data.snapshotBlock, snapshot);
+  assert.equal(maxInFlight, 7);
+  assert.deepEqual(observedBlocks, Array(7).fill(snapshot));
 });
 
 test("maps SocialScan enrichment and starts explorer calls in parallel", async () => {

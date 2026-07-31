@@ -10,7 +10,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { Rpc } from "./rpc.mjs";
+import { createRpcClient } from "./rpc.mjs";
 import { createSocialScanProvider } from "./socialscan.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -118,73 +118,80 @@ export async function analyzeAddress(address, networkKey = "atlantic_testnet", o
   if (!net) throw new Error(`Unknown network "${networkKey}". Available: ${Object.keys(networks.networks).join(", ")}`);
   if (!isValidAddress(address)) throw new Error(`Invalid address "${address}" — expected 0x + 40 hex chars`);
 
-  const rpc = opts.rpc || new Rpc(net.rpcUrl, opts.rpcOptions || {});
+  const rpc = opts.rpc || createRpcClient(net, {
+    rpcOptions: opts.rpcOptions,
+    poolOptions: opts.rpcPoolOptions,
+  });
   const explorerApiKey =
     opts.explorerApiKey ??
     process.env[net.explorerApiKeyEnv || "SOCIALSCAN_API_KEY"] ??
     "";
+  const addrLower = address.toLowerCase(); // normalized for calls/comparisons
+  const snapshotBlock = await rpc.getBlockNumber();
   const explorer = createSocialScanProvider({
     baseUrl: net.explorerApiUrl,
     apiKey: explorerApiKey,
     fetchImpl,
     activityPageSize: opts.explorerActivityPageSize,
-    getLatestBlock: () => rpc.getBlockNumber(),
+    getLatestBlock: async () => snapshotBlock,
   });
-  const addrLower = address.toLowerCase(); // normalized for calls/comparisons
 
   const result = {
     address, // keep original checksum casing in display
     network: net.name,
     chainId: net.chainId,
     analyzedAt: new Date().toISOString(),
+    snapshotBlock,
   };
-  result.nativePrice = await fetchNativePriceUsd(net, { offline, fetchImpl });
+  const tokenCfg = tokensByNet[networkKey] || {};
+  const [nativePrice, code, balWei, nonceHex, tokenResults] = await Promise.all([
+    fetchNativePriceUsd(net, { offline, fetchImpl }),
+    rpc.getCode(addrLower, snapshotBlock),
+    rpc.getBalance(addrLower, snapshotBlock),
+    rpc.call("eth_getTransactionCount", [addrLower, snapshotBlock]),
+    Promise.all(
+      Object.entries(tokenCfg).map(async ([symbol, token]) => {
+        const response = await rpc.ethCallSafe(
+          token.address,
+          encodeBalanceOf(addrLower),
+          snapshotBlock
+        );
+        if (!response.ok) {
+          return {
+            failure: {
+              symbol,
+              reason: String(response.error || "balance query failed"),
+            },
+          };
+        }
+        if (!response.data || response.data === "0x" || response.data === "0x0") {
+          return {};
+        }
+        const balance = formatUnits(response.data, token.decimals);
+        return balance === "0"
+          ? {}
+          : {
+              holding: {
+                symbol,
+                address: token.address,
+                balance,
+                source: "registry",
+              },
+            };
+      })
+    ),
+  ]);
 
-  // 1. Address type (EOA vs Contract)
-  const code = await rpc.getCode(addrLower);
+  result.nativePrice = nativePrice;
   const isContract = !!code && code !== "0x" && code.length > 2;
   result.addressType = isContract ? "Contract" : "EOA";
   if (isContract) result.bytecodeSize = (code.length - 2) / 2;
 
-  // 2. Native balance
-  const balWei = await rpc.getBalance(addrLower);
   const nativeDecimals = Number.isInteger(net.nativeDecimals) ? net.nativeDecimals : 18;
   result.nativeCurrency = net.nativeCurrency;
   result.nativeBalanceWei = balWei;
   result.nativeBalance = formatUnits(balWei, nativeDecimals);
 
-  // 3. ERC20 token holdings (from assets/tokens.json)
-  const tokenCfg = tokensByNet[networkKey] || {};
-  const tokenResults = await Promise.all(
-    Object.entries(tokenCfg).map(async ([symbol, token]) => {
-      const response = await rpc.ethCallSafe(
-        token.address,
-        encodeBalanceOf(addrLower)
-      );
-      if (!response.ok) {
-        return {
-          failure: {
-            symbol,
-            reason: String(response.error || "balance query failed"),
-          },
-        };
-      }
-      if (!response.data || response.data === "0x" || response.data === "0x0") {
-        return {};
-      }
-      const balance = formatUnits(response.data, token.decimals);
-      return balance === "0"
-        ? {}
-        : {
-            holding: {
-              symbol,
-              address: token.address,
-              balance,
-              source: "registry",
-            },
-          };
-    })
-  );
   const registryHoldings = tokenResults
     .map(({ holding }) => holding)
     .filter(Boolean);
@@ -200,8 +207,6 @@ export async function analyzeAddress(address, networkKey = "atlantic_testnet", o
     ? { available: false, reason: "offline mode", holdings: [] }
     : { available: false, reason: "not attempted", holdings: [] };
 
-  // 4. Nonce / sent-tx count
-  const nonceHex = await rpc.call("eth_getTransactionCount", [addrLower, "latest"]);
   result.nonce = parseInt(nonceHex, 16);
 
   // 5. Activity (best-effort explorer enrichment)

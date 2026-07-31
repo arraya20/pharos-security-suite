@@ -9,7 +9,7 @@
 // a 4xx) fail fast without wasting time.
 
 // Classify whether a failed attempt is worth retrying.
-function isTransient(err) {
+export function isTransient(err) {
   if (!err) return false;
   if (err.transient === true) return true; // tagged below
   const msg = String(err.message || err);
@@ -118,4 +118,154 @@ export class Rpc {
       return { ok: false, data: null, error: e.message, transient: isTransient(e) };
     }
   }
+}
+
+export class RpcPool {
+  constructor(
+    providers,
+    {
+      hedgeDelayMs = 500,
+      failureThreshold = 2,
+      cooldownMs = 30_000,
+      now = () => Date.now(),
+    } = {}
+  ) {
+    if (!Array.isArray(providers) || providers.length === 0) {
+      throw new TypeError("RpcPool requires at least one provider");
+    }
+    this.providers = providers;
+    this.hedgeDelayMs = hedgeDelayMs;
+    this.failureThreshold = failureThreshold;
+    this.cooldownMs = cooldownMs;
+    this.now = now;
+    this.health = new Map(
+      providers.map((provider) => [provider, { failures: 0, openUntil: 0 }])
+    );
+  }
+
+  _availableProviders() {
+    const now = this.now();
+    const available = this.providers.filter(
+      (provider) => this.health.get(provider).openUntil <= now
+    );
+    return available.length ? available : [this.providers[0]];
+  }
+
+  _success(provider) {
+    const health = this.health.get(provider);
+    health.failures = 0;
+    health.openUntil = 0;
+  }
+
+  _failure(provider) {
+    const health = this.health.get(provider);
+    health.failures += 1;
+    if (health.failures >= this.failureThreshold) {
+      health.openUntil = this.now() + this.cooldownMs;
+    }
+  }
+
+  async call(method, params = []) {
+    const providers = this._availableProviders();
+    if (providers.length === 1) return providers[0].call(method, params);
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let active = 0;
+      let nextIndex = 0;
+      let lastError;
+      const started = new Set();
+      let hedgeTimer;
+
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(hedgeTimer);
+        fn(value);
+      };
+
+      const startNext = () => {
+        while (nextIndex < providers.length && started.has(nextIndex)) nextIndex += 1;
+        if (nextIndex >= providers.length) {
+          if (active === 0) finish(reject, lastError);
+          return;
+        }
+        const index = nextIndex++;
+        const provider = providers[index];
+        started.add(index);
+        active += 1;
+        Promise.resolve()
+          .then(() => provider.call(method, params))
+          .then((value) => {
+            active -= 1;
+            this._success(provider);
+            finish(resolve, value);
+          })
+          .catch((error) => {
+            active -= 1;
+            lastError = error;
+            if (!isTransient(error)) {
+              finish(reject, error);
+              return;
+            }
+            this._failure(provider);
+            if (active === 0) startNext();
+          });
+      };
+
+      startNext();
+      hedgeTimer = setTimeout(() => {
+        if (!settled) startNext();
+      }, this.hedgeDelayMs);
+      hedgeTimer.unref?.();
+    });
+  }
+
+  getCode(addr, block = "latest") {
+    return this.call("eth_getCode", [addr, block]);
+  }
+
+  getStorageAt(addr, slot, block = "latest") {
+    return this.call("eth_getStorageAt", [addr, slot, block]);
+  }
+
+  getBalance(addr, block = "latest") {
+    return this.call("eth_getBalance", [addr, block]);
+  }
+
+  getBlockNumber() {
+    return this.call("eth_blockNumber");
+  }
+
+  chainId() {
+    return this.call("eth_chainId");
+  }
+
+  async ethCallSafe(to, data, block = "latest") {
+    try {
+      const result = await this.call("eth_call", [{ to, data }, block]);
+      return { ok: true, data: result };
+    } catch (error) {
+      return {
+        ok: false,
+        data: null,
+        error: error.message,
+        transient: isTransient(error),
+      };
+    }
+  }
+}
+
+export function createRpcClient(net, options = {}) {
+  const urls = Array.isArray(net.rpcUrls) && net.rpcUrls.length
+    ? net.rpcUrls
+    : [net.rpcUrl];
+  const providers = urls.map((url, index) => {
+    const rpc = new Rpc(url, options.rpcOptions || {});
+    rpc.label = index === 0 ? "primary" : `secondary-${index}`;
+    return rpc;
+  });
+  return providers.length === 1
+    ? providers[0]
+    : new RpcPool(providers, options.poolOptions || {});
 }

@@ -14,7 +14,7 @@
       "prefix": "contract-inspector",
       "repository": "https://github.com/arraya20/pharos-contract-inspector.git",
       "branch": "master",
-      "commit": "12f45315a656866ef7c340ececbd8d4d2d495545",
+      "commit": "ab333f9c9155dadbb667b612d5139bc84bc965af",
       "requiredFiles": ["package.json", "README.md", "server.js", "test-server.js"]
     },
     {

@@ -6,8 +6,13 @@ import subprocess
 
 import requests
 
-# Hardcoded private key (NEVER do this) — used by the example scanner test.
-PRIVATE_KEY = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# Key-shaped but unusable fixture: the secp256k1 group order is not a valid
+# private-key scalar. It is split so repository scanners cannot mistake it for
+# a live credential.
+PRIVATE_KEY = (
+    "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
+    "BAAEDCE6AF48A03BBFD25E8CD0364141"
+)
 
 # Swapped, non-Pharos RPC — could harvest keys / forge chain state.
 RPC_URL = "https://rpc.evil-pharos.example/v1"

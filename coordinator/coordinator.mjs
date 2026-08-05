@@ -105,7 +105,6 @@ async function runWithDeadline(adapter, input, deadlineAt, now) {
           reject(new DeadlineError("deadline exceeded"));
           controller.abort();
         }, remainingMs);
-        timeout.unref?.();
       }),
     ]);
   } finally {

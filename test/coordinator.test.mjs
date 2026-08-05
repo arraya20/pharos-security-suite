@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { BoundedTtlCache } from "../coordinator/cache.mjs";
 import { defineAdapter } from "../coordinator/adapters.mjs";
@@ -167,6 +168,48 @@ test("returns TIMEOUT and aborts the adapter when the budget expires", async () 
 
   assert.equal(result.status, "TIMEOUT");
   assert.equal(aborted, true);
+});
+
+test("keeps a standalone process alive until the deadline expires", () => {
+  const script = `
+    import { createCoordinator } from "./coordinator/index.mjs";
+
+    let aborted = false;
+    const coordinator = createCoordinator({
+      adapters: {
+        address: {
+          module: "address-intelligence",
+          version: "0.1.0",
+          async assess(_request, context) {
+            await new Promise((resolve) => {
+              context.signal.addEventListener("abort", () => {
+                aborted = true;
+                resolve();
+              });
+            });
+            return {};
+          },
+        },
+      },
+      defaultDeadlineMs: 20,
+    });
+
+    const result = await coordinator.assess({
+      schemaVersion: "1.0",
+      targetType: "ADDRESS",
+      target: { address: "${ADDRESS}", network: "mainnet" },
+    });
+    if (result.status !== "TIMEOUT" || !aborted) process.exitCode = 1;
+  `;
+
+  const child = spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
+    cwd: new URL("..", import.meta.url),
+    stdio: "ignore",
+    timeout: 1000,
+  });
+
+  assert.equal(child.error, undefined);
+  assert.equal(child.status, 0);
 });
 
 test("coalesces concurrent identical requests and serves later cache hits", async () => {

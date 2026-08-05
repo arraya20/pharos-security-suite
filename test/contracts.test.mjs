@@ -3,12 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import Ajv2020 from "ajv/dist/2020.js";
 import {
   validateAssessmentRequest,
   validateAssessmentResult,
 } from "../coordinator/contracts.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const requestSchema = JSON.parse(
+  fs.readFileSync(path.join(ROOT, "contracts", "assessment-request.schema.json"), "utf8")
+);
 
 test("checked-in JSON schemas expose the stable 1.0 contract", () => {
   for (const file of [
@@ -82,6 +86,37 @@ test("requires the target implied by targetType", () => {
       }),
     /address is required/i
   );
+});
+
+test("JSON Schema enforces the same target requirements as the runtime validator", () => {
+  const validate = new Ajv2020({ allErrors: true }).compile(requestSchema);
+  const invalidRequests = [
+    {
+      schemaVersion: "1.0",
+      targetType: "ADDRESS",
+      target: { network: "mainnet" },
+    },
+    {
+      schemaVersion: "1.0",
+      targetType: "CONTRACT",
+      target: {},
+    },
+    {
+      schemaVersion: "1.0",
+      targetType: "SKILL",
+      target: {},
+    },
+    {
+      schemaVersion: "1.0",
+      targetType: "FULL",
+      target: { network: "testnet" },
+    },
+  ];
+
+  for (const input of invalidRequests) {
+    assert.equal(validate(input), false, JSON.stringify(input));
+    assert.throws(() => validateAssessmentRequest(input));
+  }
 });
 
 test("validates normalized assessment results", () => {

@@ -36,5 +36,29 @@
         "deadlineMs": { "type": "integer", "minimum": 100, "maximum": 60000 }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "targetType": { "enum": ["ADDRESS", "CONTRACT"] } } },
+      "then": { "properties": { "target": { "type": "object", "required": ["address"] } } }
+    },
+    {
+      "if": { "properties": { "targetType": { "const": "SKILL" } } },
+      "then": { "properties": { "target": { "type": "object", "required": ["skillRef"] } } }
+    },
+    {
+      "if": { "properties": { "targetType": { "const": "FULL" } } },
+      "then": {
+        "properties": {
+          "target": {
+            "type": "object",
+            "anyOf": [
+              { "type": "object", "required": ["address"] },
+              { "type": "object", "required": ["skillRef"] }
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

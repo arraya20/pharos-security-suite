@@ -54,13 +54,15 @@ Initial release for the Pharos Agent Center Skill Builder Campaign.
 - BigInt-precise `formatUnits` for token totals (`lib/format.js`).
 - CLI runner with `--network`, `--rpc`, `--json`, `--offline` flags
   (`inspect.js`).
-- Optional dependency-free HTTP API wrapper (`server.js`) with SSRF guard
-  (custom RPC URLs disabled by default; opt in via `ALLOW_CUSTOM_RPC=1`).
+- Optional dependency-free HTTP API wrapper (`server.js`) with fail-fast
+  concurrency bounds, abortable deadlines, and an SSRF guard that rejects
+  custom RPC URLs unconditionally.
 - Unit tests for risk scoring, inspect-core helpers, BigInt formatting,
   bytecode disassembler, proxy resolution, and metadata decoding.
 
 ### Security
 - RPC `chainId` mismatch guard prevents accidental cross-network reads when a
   custom RPC is supplied.
-- HTTP API rejects custom RPC URLs by default.
+- HTTP API rejects custom RPC URLs unconditionally; custom endpoints remain a
+  local CLI-only option.
 - HTTP API caps request body at 64 KiB.

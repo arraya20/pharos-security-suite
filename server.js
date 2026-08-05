@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Dependency-free HTTP API wrapper around the inspector.
-// POST /inspect { address, network?, rpc?, offline? }
+// POST /inspect { address, network?, offline? }
 
 import http from "node:http";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,7 @@ const DEFAULT_RATE_LIMIT_MAX_BUCKETS = envNumber("RATE_LIMIT_MAX_BUCKETS", 10_00
 const DEFAULT_REQUEST_TIMEOUT_MS = envNumber("REQUEST_TIMEOUT_MS", 20_000);
 const DEFAULT_CACHE_TTL_MS = envNumber("CACHE_TTL_MS", 15_000);
 const DEFAULT_CACHE_MAX_ENTRIES = envNumber("CACHE_MAX_ENTRIES", 500);
-const DEFAULT_ALLOW_CUSTOM_RPC = process.env.ALLOW_CUSTOM_RPC === "1";
+const DEFAULT_MAX_CONCURRENT_INSPECTIONS = envNumber("MAX_CONCURRENT_INSPECTIONS", 4);
 
 class ServiceError extends Error {
   constructor(status, code, publicMessage, headers = {}) {
@@ -66,7 +66,7 @@ async function readJson(req, maxBodyBytes) {
   }
 }
 
-function parseInspectPayload(body, allowCustomRpc) {
+function parseInspectPayload(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new ServiceError(400, "bad_request", "JSON body must be an object");
   }
@@ -88,21 +88,17 @@ function parseInspectPayload(body, allowCustomRpc) {
   if (typeof offline !== "boolean") {
     throw new ServiceError(400, "bad_request", "offline must be a boolean");
   }
-  if (body.rpc != null && typeof body.rpc !== "string") {
-    throw new ServiceError(400, "bad_request", "rpc must be a string");
-  }
-  if (body.rpc && !allowCustomRpc) {
+  if (body.rpc != null) {
     throw new ServiceError(
       400,
-      "custom_rpc_disabled",
-      "Custom RPC URLs are disabled for the HTTP API",
+      "custom_rpc_forbidden",
+      "Custom RPC URLs are not accepted by the HTTP API",
     );
   }
 
   return {
     address,
     network,
-    rpcUrl: body.rpc || null,
     online: !offline,
   };
 }
@@ -120,17 +116,20 @@ export function createServer({
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   cacheTtlMs = DEFAULT_CACHE_TTL_MS,
   cacheMaxEntries = DEFAULT_CACHE_MAX_ENTRIES,
-  allowCustomRpc = DEFAULT_ALLOW_CUSTOM_RPC,
+  maxConcurrentInspections = DEFAULT_MAX_CONCURRENT_INSPECTIONS,
 } = {}) {
+  if (!Number.isInteger(maxConcurrentInspections) || maxConcurrentInspections < 1) {
+    throw new TypeError("maxConcurrentInspections must be a positive integer");
+  }
   const buckets = new Map();
   const cache = new Map();
   const inFlight = new Map();
+  let activeInspections = 0;
 
   function cacheKey(input) {
     return JSON.stringify({
       address: input.address.toLowerCase(),
       network: input.network,
-      rpcUrl: input.rpcUrl,
       online: input.online,
     });
   }
@@ -162,15 +161,25 @@ export function createServer({
     if (inFlight.has(key)) {
       return { report: await inFlight.get(key), cacheStatus: "COALESCED" };
     }
+    if (activeInspections >= maxConcurrentInspections) {
+      throw new ServiceError(
+        503,
+        "inspection_capacity_exceeded",
+        "Inspection capacity is full; retry shortly",
+        { "retry-after": "1" },
+      );
+    }
 
+    const controller = new AbortController();
+    activeInspections += 1;
     let timeout;
     const job = Promise.race([
-      inspect(input),
+      inspect({ ...input, signal: controller.signal }),
       new Promise((_, reject) => {
-        timeout = setTimeout(
-          () => reject(new ServiceError(504, "inspection_timeout", "Contract inspection timed out")),
-          requestTimeoutMs,
-        );
+        timeout = setTimeout(() => {
+          reject(new ServiceError(504, "inspection_timeout", "Contract inspection timed out"));
+          controller.abort();
+        }, requestTimeoutMs);
         timeout.unref?.();
       }),
     ])
@@ -180,6 +189,7 @@ export function createServer({
       })
       .finally(() => {
         clearTimeout(timeout);
+        activeInspections -= 1;
         inFlight.delete(key);
       });
     inFlight.set(key, job);
@@ -250,7 +260,7 @@ export function createServer({
       }
 
       const body = await readJson(req, maxBodyBytes);
-      const input = parseInspectPayload(body, allowCustomRpc);
+      const input = parseInspectPayload(body);
       inspectionStarted = true;
       req.setTimeout(0);
       let inspected;

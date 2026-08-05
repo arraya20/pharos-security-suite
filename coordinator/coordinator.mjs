@@ -16,20 +16,16 @@ class ConcurrencyLimiter {
     }
     this.maxConcurrent = maxConcurrent;
     this.active = 0;
-    this.queue = [];
   }
 
-  async run(task) {
-    if (this.active >= this.maxConcurrent) {
-      await new Promise((resolve) => this.queue.push(resolve));
-    }
+  run(task) {
+    if (this.active >= this.maxConcurrent) return null;
     this.active += 1;
-    try {
-      return await task();
-    } finally {
-      this.active -= 1;
-      this.queue.shift()?.();
-    }
+    return Promise.resolve()
+      .then(task)
+      .finally(() => {
+        this.active -= 1;
+      });
   }
 }
 
@@ -58,11 +54,42 @@ function requestCacheKey(input) {
 function withCacheStatus(result, status, assessmentId) {
   const cloned = structuredClone(result);
   cloned.assessmentId = assessmentId;
+  if (cloned.targetType === "FULL" && Array.isArray(cloned.details?.results)) {
+    cloned.details.results = cloned.details.results.map((specialist) => ({
+      ...specialist,
+      assessmentId,
+    }));
+  }
   cloned.details = {
     ...cloned.details,
     cache: { status },
   };
   return cloned;
+}
+
+function capacityResult(input, assessmentId, startMs, now) {
+  return {
+    schemaVersion: "1.0",
+    assessmentId,
+    targetType: input.targetType,
+    status: "FAILED",
+    risk: null,
+    findings: [],
+    evidence: [],
+    warnings: [
+      {
+        code: "COORDINATOR_BUSY",
+        message: "Assessment capacity is currently full; retry shortly.",
+      },
+    ],
+    confidence: "UNKNOWN",
+    timing: {
+      startedAt: new Date(startMs).toISOString(),
+      durationMs: now() - startMs,
+    },
+    source: { module: "pharos-security-coordinator", version: "0.1.0" },
+    details: {},
+  };
 }
 
 async function runWithDeadline(adapter, input, deadlineAt, now) {
@@ -164,15 +191,22 @@ export function createCoordinator({
 
     const startMs = now();
     const job = limiter.run(() => execute(input, assessmentId, startMs))
-      .then((result) => {
+    if (!job) {
+      return withCacheStatus(
+        capacityResult(input, assessmentId, startMs, now),
+        "BYPASS",
+        assessmentId
+      );
+    }
+    const trackedJob = job.then((result) => {
         if (result.status === "COMPLETE" || result.status === "PARTIAL") {
           cache.set(cacheKey, result, cacheTtlMs);
         }
         return result;
       })
       .finally(() => inFlight.delete(inFlightKey));
-    inFlight.set(inFlightKey, job);
-    return withCacheStatus(await job, "MISS", assessmentId);
+    inFlight.set(inFlightKey, trackedJob);
+    return withCacheStatus(await trackedJob, "MISS", assessmentId);
   }
 
   return { assess };

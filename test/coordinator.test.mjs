@@ -195,6 +195,55 @@ test("coalesces concurrent identical requests and serves later cache hits", asyn
   assert.equal(third.details.cache.status, "HIT");
 });
 
+test("rewrites nested FULL assessment IDs for coalesced and cached responses", async () => {
+  let release;
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        await blocked;
+        return { risk: { score: 5, level: "LOW" }, confidence: "full" };
+      }),
+      contract: adapter("contract-inspector", "1.1.0", async () => ({
+        risk: { score: 10, level: "LOW" },
+      })),
+    },
+    cacheTtlMs: 1000,
+  });
+  const target = { address: ADDRESS, network: "mainnet" };
+
+  const firstPromise = coordinator.assess({
+    ...request("FULL", target),
+    assessmentId: "assessment-first",
+  });
+  const coalescedPromise = coordinator.assess({
+    ...request("FULL", target),
+    assessmentId: "assessment-coalesced",
+  });
+  release();
+
+  const [first, coalesced] = await Promise.all([firstPromise, coalescedPromise]);
+  const cached = await coordinator.assess({
+    ...request("FULL", target),
+    assessmentId: "assessment-cached",
+  });
+
+  assert.deepEqual(first.details.results.map(({ assessmentId }) => assessmentId), [
+    "assessment-first",
+    "assessment-first",
+  ]);
+  assert.deepEqual(coalesced.details.results.map(({ assessmentId }) => assessmentId), [
+    "assessment-coalesced",
+    "assessment-coalesced",
+  ]);
+  assert.deepEqual(cached.details.results.map(({ assessmentId }) => assessmentId), [
+    "assessment-cached",
+    "assessment-cached",
+  ]);
+});
+
 test("does not coalesce identical requests with different deadline budgets", async () => {
   let calls = 0;
   const coordinator = createCoordinator({
@@ -271,4 +320,46 @@ test("bounds concurrently executing assessments", async () => {
   );
 
   assert.equal(maxInFlight, 2);
+});
+
+test("fails fast instead of queueing unique assessments when capacity is full", async () => {
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => {
+    started = resolve;
+  });
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        started();
+        await blocked;
+        return { risk: { score: 1, level: "LOW" }, confidence: "full" };
+      }),
+    },
+    maxConcurrentAssessments: 1,
+  });
+
+  const first = coordinator.assess(
+    request("ADDRESS", { address: ADDRESS, network: "mainnet" })
+  );
+  await startedPromise;
+  const overloaded = await Promise.race([
+    coordinator.assess(
+      request("ADDRESS", {
+        address: "0x0000000000000000000000000000000000000002",
+        network: "mainnet",
+      })
+    ),
+    new Promise((resolve) => setTimeout(() => resolve("queued"), 50)),
+  ]);
+
+  assert.notEqual(overloaded, "queued");
+  assert.equal(overloaded.status, "FAILED");
+  assert.equal(overloaded.warnings[0].code, "COORDINATOR_BUSY");
+  assert.equal(overloaded.details.cache.status, "BYPASS");
+  release();
+  await first;
 });

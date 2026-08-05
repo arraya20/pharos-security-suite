@@ -132,6 +132,37 @@ export function checkModules({ root = ROOT, manifest }) {
   return { ok: true, checked };
 }
 
+function resolveRemoteHead(module) {
+  const output = execFileSync(
+    "git",
+    ["ls-remote", module.repository, `refs/heads/${module.branch}`],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  ).trim();
+  return output.split(/\s+/)[0] ?? "";
+}
+
+export function checkRemoteHeads({ manifest, resolveHead = resolveRemoteHead }) {
+  validateManifest(manifest);
+  const checked = [];
+
+  for (const module of manifest.modules) {
+    const head = resolveHead(module);
+    if (!COMMIT_PATTERN.test(head)) {
+      throw new Error(
+        `Unable to resolve upstream ${module.branch} head for ${module.name}`
+      );
+    }
+    if (head !== module.commit) {
+      throw new Error(
+        `${module.name} lock ${module.commit} does not match upstream ${module.branch} head ${head}`
+      );
+    }
+    checked.push(module.name);
+  }
+
+  return { ok: true, checked };
+}
+
 function requireText(text, expected, source) {
   if (!text.includes(expected)) {
     throw new Error(`${source} is missing expected text: ${expected}`);
@@ -201,6 +232,12 @@ function main() {
   checkDocumentation({ root: ROOT });
   console.log(`Module drift check passed: ${result.checked.join(", ")}`);
   console.log("Documentation metadata check passed");
+  if (process.argv.includes("--remote")) {
+    const remoteResult = checkRemoteHeads({ manifest });
+    console.log(
+      `Upstream head check passed: ${remoteResult.checked.join(", ")}`
+    );
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

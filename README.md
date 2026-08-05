@@ -191,9 +191,12 @@ transient-error failover, and circuit-breaker cooldowns. Deterministic RPC error
 are returned directly instead of being retried against every provider.
 
 The coordinator defaults to an 8-second shared deadline, 15-second result cache,
-500 cache entries, and five concurrent assessments. These are constructor
-settings—not assumptions about the Anvita host—so deployment can tune them after
-measuring the platform's CPU, memory, network locality, and Service Agent limits.
+500 cache entries, and five concurrent assessments. Cache hits and identical
+in-flight requests are served first; excess unique work fails fast with a
+`COORDINATOR_BUSY` warning instead of waiting in a latency-amplifying queue.
+These are constructor settings—not assumptions about the Anvita host—so
+deployment can tune them after measuring the platform's CPU, memory, network
+locality, and Service Agent limits.
 The included synthetic benchmark asserts local coordinator overhead remains far
 below its 500 ms p95 guardrail; it does not claim RPC latency for Anvita.
 
@@ -207,7 +210,11 @@ recorded upstream commits:
 npm ci
 npm test
 npm run check:modules
+npm run check:upstreams
 ```
+
+`check:upstreams` requires network access and verifies that every locked module
+commit is the current head of its declared upstream branch.
 
 To update one module, start from a clean worktree:
 

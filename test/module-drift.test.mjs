@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   checkDocumentation,
   checkModules,
+  checkRemoteHeads,
   validateManifest,
 } from "../scripts/check-module-drift.mjs";
 
@@ -46,6 +47,19 @@ test("rejects duplicate module prefixes", () => {
         ],
       }),
     /duplicate prefix/i
+  );
+});
+
+test("requires lock commits to match declared upstream branch heads", () => {
+  const manifest = { schemaVersion: 1, modules: [validModule] };
+
+  assert.deepEqual(
+    checkRemoteHeads({ manifest, resolveHead: () => validModule.commit }),
+    { ok: true, checked: ["one"] }
+  );
+  assert.throws(
+    () => checkRemoteHeads({ manifest, resolveHead: () => "b".repeat(40) }),
+    /does not match upstream main head/i
   );
 });
 

@@ -11,6 +11,7 @@
     "benchmark": "node scripts/benchmark-coordinator.mjs",
     "package:coordinator": "node scripts/package-coordinator.mjs",
     "check:modules": "node scripts/check-module-drift.mjs",
+    "check:upstreams": "node scripts/check-module-drift.mjs --remote",
     "sync:module": "node scripts/sync-module.mjs"
   },
   "engines": {

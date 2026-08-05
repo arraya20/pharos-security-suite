@@ -71,9 +71,7 @@ curl -X POST http://127.0.0.1:8790/inspect \
   -H 'Content-Type: application/json' \
   --data '{"address":"0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B","network":"testnet","offline":true}'
 
-# Custom RPC over HTTP is disabled by default for SSRF safety.
-# Enable only for trusted/local deployments:
-ALLOW_CUSTOM_RPC=1 npm run serve
+# Custom RPC URLs are never accepted by the HTTP API (SSRF safety).
 
 # Custom RPC via CLI
 node inspect.js 0x... --rpc https://atlantic.dplabs-internal.com

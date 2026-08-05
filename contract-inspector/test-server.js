@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { createServer } from "./server.js";
 
 const ADDRESS = "0x0000000000000000000000000000000000000001";
+const SECOND_ADDRESS = "0x0000000000000000000000000000000000000002";
 
 async function withServer(options, fn) {
   const server = createServer(options);
@@ -152,10 +153,16 @@ async function withServer(options, fn) {
 }
 
 {
+  let aborted = false;
   await withServer(
     {
       requestTimeoutMs: 5,
-      inspect: async () => new Promise((resolve) => setTimeout(() => resolve({}), 50)),
+      inspect: async ({ signal }) => new Promise((resolve) => {
+        signal.addEventListener("abort", () => {
+          aborted = true;
+          resolve({});
+        });
+      }),
     },
     async (baseUrl) => {
       const response = await fetch(`${baseUrl}/inspect`, {
@@ -165,6 +172,69 @@ async function withServer(options, fn) {
       });
       assert.equal(response.status, 504);
       assert.equal((await response.json()).error, "inspection_timeout");
+    },
+  );
+  assert.equal(aborted, true);
+}
+
+{
+  await withServer(
+    {
+      allowCustomRpc: true,
+      inspect: async () => ({ address: ADDRESS, type: "Contract" }),
+    },
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: ADDRESS,
+          rpc: "http://169.254.169.254/latest/meta-data",
+        }),
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error, "custom_rpc_forbidden");
+    },
+  );
+}
+
+{
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => {
+    started = resolve;
+  });
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  await withServer(
+    {
+      maxConcurrentInspections: 1,
+      inspect: async ({ address }) => {
+        if (address === ADDRESS) {
+          started();
+          await blocked;
+        }
+        return { address, type: "Contract" };
+      },
+    },
+    async (baseUrl) => {
+      const request = (address) => fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const first = request(ADDRESS);
+      await startedPromise;
+      const overloaded = await Promise.race([
+        request(SECOND_ADDRESS),
+        new Promise((resolve) => setTimeout(() => resolve("queued"), 50)),
+      ]);
+      assert.notEqual(overloaded, "queued");
+      assert.equal(overloaded.status, 503);
+      assert.equal((await overloaded.json()).error, "inspection_capacity_exceeded");
+      release();
+      assert.equal((await first).status, 200);
     },
   );
 }

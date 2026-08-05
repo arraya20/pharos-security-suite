@@ -94,11 +94,9 @@ Verified local API result against Pharos USDC testnet:
 }
 ```
 
-Security note: the HTTP API rejects request-body custom RPC URLs by default to avoid SSRF when exposed outside localhost. For trusted local deployments only, enable them with:
-
-```bash
-ALLOW_CUSTOM_RPC=1 npm run serve
-```
+Security note: the HTTP API always rejects request-body custom RPC URLs to avoid
+SSRF when exposed outside localhost. Trusted operators can still use `--rpc`
+through the local CLI.
 
 Hosted deployments should also configure:
 
@@ -109,6 +107,7 @@ Hosted deployments should also configure:
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window in milliseconds. |
 | `RATE_LIMIT_MAX_BUCKETS` | `10000` | Upper bound for tracked client buckets. |
 | `REQUEST_TIMEOUT_MS` | `20000` | Request socket timeout. |
+| `MAX_CONCURRENT_INSPECTIONS` | `4` | Unique inspections allowed in flight; excess work fails fast with HTTP 503. |
 
 ## Example Output
 

@@ -19,6 +19,84 @@ export function isTransient(err) {
   return false;
 }
 
+function combinedSignal(...signals) {
+  const active = signals.filter(Boolean);
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
+  return AbortSignal.any(active);
+}
+
+function abortedError(method) {
+  const error = new Error(`RPC aborted for ${method}`);
+  error.name = "AbortError";
+  error.transient = true;
+  error.aborted = true;
+  return error;
+}
+
+function abortableDelay(ms, signal, method) {
+  if (signal?.aborted) return Promise.reject(abortedError(method));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortedError(method));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function validateRpcResponse(json, expectedId, method) {
+  const hasResult = Object.prototype.hasOwnProperty.call(json || {}, "result");
+  const hasError = Object.prototype.hasOwnProperty.call(json || {}, "error");
+  const validError =
+    hasError &&
+    json.error &&
+    typeof json.error === "object" &&
+    !Array.isArray(json.error) &&
+    Number.isInteger(json.error.code) &&
+    typeof json.error.message === "string";
+  if (
+    !json ||
+    typeof json !== "object" ||
+    Array.isArray(json) ||
+    json.jsonrpc !== "2.0" ||
+    json.id !== expectedId ||
+    hasResult === hasError ||
+    (hasError && !validError)
+  ) {
+    const error = new Error(`Invalid JSON-RPC response for ${method}`);
+    error.transient = true;
+    throw error;
+  }
+  return json;
+}
+
+const HEX_QUANTITY_METHODS = new Set([
+  "eth_chainId",
+  "eth_blockNumber",
+  "eth_getBalance",
+  "eth_getTransactionCount",
+]);
+const HEX_DATA_METHODS = new Set(["eth_getCode", "eth_getStorageAt", "eth_call"]);
+
+function validateRpcResult(result, method) {
+  const valid = HEX_QUANTITY_METHODS.has(method)
+    ? typeof result === "string" && /^0x(?:0|[1-9a-f][0-9a-f]*)$/i.test(result)
+    : HEX_DATA_METHODS.has(method)
+      ? typeof result === "string" && /^0x[0-9a-f]*$/i.test(result)
+      : true;
+  if (!valid) {
+    const error = new Error(`Invalid JSON-RPC result for ${method}`);
+    error.transient = true;
+    throw error;
+  }
+  return result;
+}
+
 export class Rpc {
   constructor(
     url,
@@ -41,29 +119,32 @@ export class Rpc {
 
   // One network attempt. Throws on any failure; the error is tagged `.transient`
   // so the retry loop knows whether to back off and try again or give up.
-  async _attempt(method, params) {
-    const body = JSON.stringify({ jsonrpc: "2.0", id: ++this.id, method, params });
+  async _attempt(method, params, callSignal = null) {
+    const requestId = ++this.id;
+    const body = JSON.stringify({ jsonrpc: "2.0", id: requestId, method, params });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let res;
+    let json;
     try {
-      const signal = this.signal
-        ? AbortSignal.any([controller.signal, this.signal])
-        : controller.signal;
+      const signal = combinedSignal(controller.signal, this.signal, callSignal);
       res = await this.fetch(this.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
         signal,
       });
+      if (res.ok) json = await res.json();
     } catch (e) {
       if (e?.name === "AbortError") {
         const err = new Error(
-          this.signal?.aborted
+          this.signal?.aborted || callSignal?.aborted
             ? `RPC aborted for ${method}`
             : `RPC timeout after ${this.timeoutMs}ms for ${method}`
         );
+        err.name = "AbortError";
         err.transient = true;
+        err.aborted = Boolean(this.signal?.aborted || callSignal?.aborted);
         throw err;
       }
       e.transient = true; // network-level failure → retryable
@@ -77,7 +158,7 @@ export class Rpc {
       err.transient = res.status === 429 || res.status >= 500;
       throw err;
     }
-    const json = await res.json();
+    json = validateRpcResponse(json, requestId, method);
     if (json.error) {
       // JSON-RPC errors are application-level (e.g. execution reverted). These
       // are deterministic — retrying won't change the answer, so fail fast.
@@ -86,20 +167,22 @@ export class Rpc {
       err.rpcError = json.error;
       throw err;
     }
-    return json.result;
+    return validateRpcResult(json.result, method);
   }
 
-  async call(method, params = []) {
+  async call(method, params = [], { signal = null } = {}) {
     let lastErr;
     for (let attempt = 0; attempt <= this.retries; attempt++) {
+      if (this.signal?.aborted || signal?.aborted) throw abortedError(method);
       try {
-        return await this._attempt(method, params);
+        return await this._attempt(method, params, signal);
       } catch (e) {
         lastErr = e;
+        if (e?.aborted || this.signal?.aborted || signal?.aborted) throw e;
         if (!isTransient(e) || attempt === this.retries) throw e;
         // Exponential backoff with jitter before the next attempt.
         const wait = this.retryBaseMs * 2 ** attempt + Math.floor(Math.random() * 100);
-        await new Promise((r) => setTimeout(r, wait));
+        await abortableDelay(wait, combinedSignal(this.signal, signal), method);
       }
     }
     throw lastErr;
@@ -194,11 +277,13 @@ export class RpcPool {
       let lastError;
       const started = new Set();
       let hedgeTimer;
+      const callController = new AbortController();
 
       const finish = (fn, value) => {
         if (settled) return;
         settled = true;
         clearTimeout(hedgeTimer);
+        callController.abort();
         fn(value);
       };
 
@@ -213,7 +298,7 @@ export class RpcPool {
         started.add(index);
         active += 1;
         Promise.resolve()
-          .then(() => provider.call(method, params))
+          .then(() => provider.call(method, params, { signal: callController.signal }))
           .then((value) => {
             active -= 1;
             this._success(provider);
@@ -221,7 +306,12 @@ export class RpcPool {
           })
           .catch((error) => {
             active -= 1;
+            if (settled) return;
             lastError = error;
+            if (error?.aborted) {
+              finish(reject, error);
+              return;
+            }
             if (!isTransient(error)) {
               finish(reject, error);
               return;

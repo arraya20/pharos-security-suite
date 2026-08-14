@@ -47,6 +47,36 @@ function isValidAddress(a) {
   return /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 
+export function chainIdToNumber(chainId) {
+  try {
+    const value = typeof chainId === "bigint"
+      ? Number(chainId)
+      : typeof chainId === "string" && chainId.startsWith("0x")
+        ? Number(BigInt(chainId))
+        : Number(chainId);
+    return Number.isSafeInteger(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function assertExpectedChainId(actualChainId, expectedChainId, network) {
+  const actual = chainIdToNumber(actualChainId);
+  if (actual === null) {
+    const error = new Error(`Invalid RPC chainId for ${network}`);
+    error.code = "RPC_INVALID_CHAIN_ID";
+    throw error;
+  }
+  if (actual !== expectedChainId) {
+    const error = new Error(
+      `RPC chainId mismatch for ${network}: expected ${expectedChainId}, got ${actual}`
+    );
+    error.code = "CHAIN_ID_MISMATCH";
+    throw error;
+  }
+  return actual;
+}
+
 function validNumber(v) {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -71,7 +101,7 @@ function parsePricePayload(json, net) {
   );
 }
 
-async function fetchNativePriceUsd(net, { offline, fetchImpl }) {
+async function fetchNativePriceUsd(net, { offline, fetchImpl, signal = null }) {
   const envPrice = envPriceUsd(net);
   if (envPrice) return envPrice;
   if (offline) return { available: false, reason: "offline mode" };
@@ -80,7 +110,10 @@ async function fetchNativePriceUsd(net, { offline, fetchImpl }) {
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 5000);
   try {
-    const res = await fetchImpl(net.nativePriceUsdUrl, { signal: ctrl.signal });
+    const requestSignal = signal
+      ? AbortSignal.any([ctrl.signal, signal])
+      : ctrl.signal;
+    const res = await fetchImpl(net.nativePriceUsdUrl, { signal: requestSignal });
     if (!res.ok) return { available: false, reason: `price feed http ${res.status}` };
     const json = await res.json();
     const usd = parsePricePayload(json, net);
@@ -127,25 +160,30 @@ export async function analyzeAddress(address, networkKey = "atlantic_testnet", o
     process.env[net.explorerApiKeyEnv || "SOCIALSCAN_API_KEY"] ??
     "";
   const addrLower = address.toLowerCase(); // normalized for calls/comparisons
-  const snapshotBlock = await rpc.getBlockNumber();
+  const [actualChainId, snapshotBlock] = await Promise.all([
+    rpc.chainId(),
+    rpc.getBlockNumber(),
+  ]);
+  const chainId = assertExpectedChainId(actualChainId, net.chainId, networkKey);
   const explorer = createSocialScanProvider({
     baseUrl: net.explorerApiUrl,
     apiKey: explorerApiKey,
     fetchImpl,
     activityPageSize: opts.explorerActivityPageSize,
     getLatestBlock: async () => snapshotBlock,
+    signal: opts.signal || null,
   });
 
   const result = {
     address, // keep original checksum casing in display
     network: net.name,
-    chainId: net.chainId,
+    chainId,
     analyzedAt: new Date().toISOString(),
     snapshotBlock,
   };
   const tokenCfg = tokensByNet[networkKey] || {};
   const [nativePrice, code, balWei, nonceHex, tokenResults] = await Promise.all([
-    fetchNativePriceUsd(net, { offline, fetchImpl }),
+    fetchNativePriceUsd(net, { offline, fetchImpl, signal: opts.signal || null }),
     rpc.getCode(addrLower, snapshotBlock),
     rpc.getBalance(addrLower, snapshotBlock),
     rpc.call("eth_getTransactionCount", [addrLower, snapshotBlock]),

@@ -158,7 +158,8 @@ deployment:
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window. |
 | `REQUEST_TIMEOUT_MS` | `20000` | Request socket timeout. |
 | `CACHE_TTL_MS` | `15000` | Short in-memory cache for duplicate analyses. |
-| `CORS_ORIGIN` | `*` | CORS origin. Set a specific origin for public deployments. |
+| `CORS_ORIGIN` | unset | CORS is denied by default; set one explicit allowed origin when browser access is required. |
+| `API_KEY` | unset | Required for `/analyze` when `HOST` is non-loopback; send as `Authorization: Bearer ...` or `X-API-Key`. |
 | `TRUST_PROXY` | `false` | Use `X-Forwarded-For`/`X-Real-IP` for rate limiting only behind a trusted proxy. |
 | `PROS_PRICE_USD` | unset | Optional PROS/USD override for price-adjusted mainnet whale/dormant thresholds. |
 | `NATIVE_PRICE_USD` | unset | Generic native-token USD fallback if a network-specific env var is not set. |

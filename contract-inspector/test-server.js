@@ -200,6 +200,40 @@ async function withServer(options, fn) {
 }
 
 {
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => { started = resolve; });
+  const upstream = new Promise((resolve) => { release = resolve; });
+  await withServer(
+    {
+      requestTimeoutMs: 5,
+      maxConcurrentInspections: 1,
+      inspect: async ({ signal }) => {
+        started();
+        signal.addEventListener("abort", () => {});
+        await upstream;
+        return { address: ADDRESS, type: "Contract" };
+      },
+    },
+    async (baseUrl) => {
+      const request = (address) => fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const firstPromise = request(ADDRESS);
+      await startedPromise;
+      const first = await firstPromise;
+      assert.equal(first.status, 504);
+      const second = await request(SECOND_ADDRESS);
+      assert.equal(second.status, 503);
+      assert.equal((await second.json()).error, "inspection_capacity_exceeded");
+      release();
+    },
+  );
+}
+
+{
   await withServer(
     {
       allowCustomRpc: true,

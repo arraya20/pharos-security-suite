@@ -73,6 +73,7 @@ export async function inspectContract({
       chainId,
       snapshotBlock,
       type: "EOA",
+      status: "COMPLETE",
       balanceWei: BigInt(bal).toString(),
       balanceNative: formatUnits(BigInt(bal), 18),
       nativeSymbol: net.nativeSymbol,
@@ -142,6 +143,7 @@ export async function inspectContract({
     chainId,
     snapshotBlock,
     type: "Contract",
+    status: incomplete.length ? "PARTIAL" : "COMPLETE",
     bytecode: { size: dis.codeSize, head: codeHex.slice(0, 10) },
     proxy: proxy.isProxy
       ? {

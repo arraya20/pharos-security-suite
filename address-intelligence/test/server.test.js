@@ -300,6 +300,40 @@ test("aborts analysis at the overall deadline and returns 504", async () => {
   );
 });
 
+test("keeps timed-out analysis counted until upstream settles", async () => {
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => { started = resolve; });
+  const upstream = new Promise((resolve) => { release = resolve; });
+  await withServer(
+    {
+      requestTimeoutMs: 5,
+      maxConcurrentAnalyses: 1,
+      analyze: async (_address, _network, opts) => {
+        started();
+        opts.signal.addEventListener("abort", () => {});
+        await upstream;
+        return { ...sampleAnalysis, address: _address };
+      },
+    },
+    async (baseUrl) => {
+      const request = (address) => fetch(`${baseUrl}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, network: "mainnet", offline: true }),
+      });
+      const firstPromise = request(sampleAnalysis.address);
+      await startedPromise;
+      const first = await firstPromise;
+      assert.equal(first.status, 504);
+      const second = await request("0x0000000000000000000000000000000000000002");
+      assert.equal(second.status, 503);
+      assert.equal((await second.json()).error, "analysis capacity exceeded");
+      release();
+    }
+  );
+});
+
 test("reports analyzer failures as upstream errors instead of invalid input", async () => {
   await withServer(
     {

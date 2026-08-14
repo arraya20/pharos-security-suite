@@ -281,6 +281,34 @@ test("returns TIMEOUT and aborts the adapter when the budget expires", async () 
   assert.equal(aborted, true);
 });
 
+test("keeps timed-out adapter work counted until it settles", async () => {
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => { started = resolve; });
+  const upstream = new Promise((resolve) => { release = resolve; });
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async (_request, context) => {
+        started();
+        context.signal.addEventListener("abort", () => {});
+        await upstream;
+        return { address: ADDRESS, score: 10 };
+      }),
+    },
+    defaultDeadlineMs: 20,
+    maxConcurrentAssessments: 1,
+  });
+
+  const firstPromise = coordinator.assess(request("ADDRESS", { address: ADDRESS, network: "mainnet" }));
+  await startedPromise;
+  const first = await firstPromise;
+  assert.equal(first.status, "TIMEOUT");
+  const second = await coordinator.assess(request("ADDRESS", { address: "0x0000000000000000000000000000000000000002", network: "mainnet" }));
+  assert.equal(second.status, "FAILED");
+  assert.equal(second.warnings[0].code, "COORDINATOR_BUSY");
+  release();
+});
+
 test("keeps a standalone process alive until the deadline expires", () => {
   const script = `
     import { createCoordinator } from "./coordinator/index.mjs";

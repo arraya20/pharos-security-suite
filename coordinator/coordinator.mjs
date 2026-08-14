@@ -21,11 +21,19 @@ class ConcurrencyLimiter {
   run(task) {
     if (this.active >= this.maxConcurrent) return null;
     this.active += 1;
-    return Promise.resolve()
-      .then(task)
-      .finally(() => {
+    const settlements = [];
+    const result = Promise.resolve().then(() => {
+      return task((promise) => settlements.push(Promise.resolve(promise)));
+    });
+    return result.finally(() => {
+      if (settlements.length) {
+        Promise.allSettled(settlements).then(() => {
+          this.active -= 1;
+        });
+      } else {
         this.active -= 1;
-      });
+      }
+    });
   }
 }
 
@@ -92,24 +100,30 @@ function capacityResult(input, assessmentId, startMs, now) {
   };
 }
 
-async function runWithDeadline(adapter, input, deadlineAt, now) {
+function runWithDeadline(adapter, input, deadlineAt, now) {
   const remainingMs = deadlineAt - now();
-  if (remainingMs <= 0) throw new DeadlineError("deadline exceeded");
+  if (remainingMs <= 0) {
+    return {
+      promise: Promise.reject(new DeadlineError("deadline exceeded")),
+      settled: Promise.resolve(),
+    };
+  }
   const controller = new AbortController();
   let timeout;
-  try {
-    return await Promise.race([
-      adapter.assess(input, { deadlineAt, signal: controller.signal }),
-      new Promise((_, reject) => {
-        timeout = setTimeout(() => {
-          reject(new DeadlineError("deadline exceeded"));
-          controller.abort();
-        }, remainingMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeout);
-  }
+  const upstream = Promise.resolve().then(() =>
+    adapter.assess(input, { deadlineAt, signal: controller.signal })
+  );
+  const settled = upstream.then(() => {}, () => {});
+  const promise = Promise.race([
+    upstream,
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => {
+        reject(new DeadlineError("deadline exceeded"));
+        controller.abort();
+      }, remainingMs);
+    }),
+  ]).finally(() => clearTimeout(timeout));
+  return { promise, settled };
 }
 
 export function createCoordinator({
@@ -128,7 +142,7 @@ export function createCoordinator({
   const limiter = new ConcurrencyLimiter(maxConcurrentAssessments);
   const inFlight = new Map();
 
-  async function execute(input, assessmentId, startMs) {
+  async function execute(input, assessmentId, startMs, registerSettlement) {
     const startedAt = new Date(startMs).toISOString();
     const deadlineMs = input.options?.deadlineMs ?? defaultDeadlineMs;
     const deadlineAt = startMs + deadlineMs;
@@ -143,7 +157,9 @@ export function createCoordinator({
         const specialistStart = now();
         const specialistStartedAt = new Date(specialistStart).toISOString();
         try {
-          const raw = await runWithDeadline(adapter, input, deadlineAt, now);
+          const run = runWithDeadline(adapter, input, deadlineAt, now);
+          registerSettlement(run.settled);
+          const raw = await run.promise;
           return normalizeSpecialistResult({
             key,
             adapter,
@@ -189,7 +205,9 @@ export function createCoordinator({
     }
 
     const startMs = now();
-    const job = limiter.run(() => execute(input, assessmentId, startMs))
+    const job = limiter.run((registerSettlement) =>
+      execute(input, assessmentId, startMs, registerSettlement)
+    )
     if (!job) {
       return withCacheStatus(
         capacityResult(input, assessmentId, startMs, now),

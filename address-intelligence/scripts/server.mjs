@@ -8,6 +8,7 @@
 
 import http from "http";
 import net from "net";
+import crypto from "crypto";
 import { analyzeAddress } from "./lib/analyze.mjs";
 import { buildReport as defaultBuildReport } from "./lib/report.mjs";
 
@@ -31,7 +32,8 @@ const DEFAULT_RESOURCE_SWEEP_INTERVAL_MS = envNumber("RESOURCE_SWEEP_INTERVAL_MS
 const DEFAULT_UPSTREAM_BUDGET_MAX = envNumber("UPSTREAM_BUDGET_MAX", 50);
 const DEFAULT_UPSTREAM_BUDGET_WINDOW_MS = envNumber("UPSTREAM_BUDGET_WINDOW_MS", 300_000);
 const DEFAULT_MAX_CONCURRENT_ANALYSES = envNumber("MAX_CONCURRENT_ANALYSES", 4);
-const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "*";
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || null;
+const API_KEY = process.env.API_KEY || process.env.AUTH_TOKEN || null;
 const DEFAULT_TRUST_PROXY = process.env.TRUST_PROXY === "true";
 const DEFAULT_TRUSTED_PROXY_HOPS = envNumber("TRUSTED_PROXY_HOPS", 1);
 
@@ -68,6 +70,19 @@ function clientKey(req, trustProxy = false, trustedProxyHops = 1) {
 
 function retryAfterSeconds(resetAt, now = Date.now()) {
   return String(Math.max(1, Math.ceil((resetAt - now) / 1000)));
+}
+
+function isLoopbackHost(host) {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
+
+function hasValidAuth(req, apiKey) {
+  const bearer = String(req.headers.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
+  const supplied = bearer || req.headers["x-api-key"];
+  if (!apiKey || typeof supplied !== "string") return false;
+  const expected = Buffer.from(apiKey);
+  const actual = Buffer.from(supplied);
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
 function sweepExpired(map, field, now) {
@@ -151,9 +166,14 @@ export function createServer({
   upstreamBudgetWindowMs = DEFAULT_UPSTREAM_BUDGET_WINDOW_MS,
   maxConcurrentAnalyses = DEFAULT_MAX_CONCURRENT_ANALYSES,
   corsOrigin = ALLOWED_ORIGIN,
+  host = HOST,
+  apiKey = API_KEY,
   trustProxy = DEFAULT_TRUST_PROXY,
   trustedProxyHops = DEFAULT_TRUSTED_PROXY_HOPS,
 } = {}) {
+  if (!isLoopbackHost(host) && !apiKey) {
+    throw new TypeError("API_KEY is required when HOST is non-local");
+  }
   const buckets = new Map();
   const cache = new Map();
   const inFlight = new Map();
@@ -291,6 +311,15 @@ export function createServer({
       }
     })();
 
+    // The deadline only settles the caller-facing race. Keep the concurrency
+    // slot and in-flight entry until the analyzer's promise really settles;
+    // AbortSignal is cooperative and upstream code may ignore it.
+    const settledPromise = workPromise.finally(() => {
+      job.settled = true;
+      activeAnalyses -= 1;
+      if (inFlight.get(cacheKey) === job) inFlight.delete(cacheKey);
+    });
+    settledPromise.catch(() => {});
     job.promise = Promise.race([workPromise, deadlinePromise])
       .then((report) => {
         if (controller.signal.aborted || Date.now() >= deadline) {
@@ -302,9 +331,6 @@ export function createServer({
       })
       .finally(() => {
         clearTimeout(timeout);
-        job.settled = true;
-        activeAnalyses -= 1;
-        if (inFlight.get(cacheKey) === job) inFlight.delete(cacheKey);
       });
     inFlight.set(cacheKey, job);
     return job;
@@ -373,8 +399,11 @@ export function createServer({
   }
 
   return http.createServer((req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", corsOrigin);
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (corsOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
+      res.setHeader("Vary", "Origin");
+    }
     if (req.method === "OPTIONS") {
       res.writeHead(204).end();
       return;
@@ -382,6 +411,13 @@ export function createServer({
 
     if (req.url === "/health" && req.method === "GET") {
       sendJson(res, 200, { ok: true, service: "pharos-address-intelligence" });
+      return;
+    }
+
+    if (!isLoopbackHost(host) && !hasValidAuth(req, apiKey)) {
+      sendJson(res, 401, { error: "authentication required" }, {
+        "WWW-Authenticate": "Bearer",
+      });
       return;
     }
 

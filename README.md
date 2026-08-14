@@ -1,6 +1,6 @@
 # Pharos Skill Inspector
 
-**Open-source security scanner for [Pharos](https://www.pharos.xyz) AI agent skills.**
+**Proprietary security scanner for [Pharos](https://www.pharos.xyz) AI agent skills.**
 Detect **prompt injection**, **data leakage**, **vulnerable dependencies**, **dangerous code**, and **on-chain (Web3) risks** *before* you install or publish a skill.
 
 Built for the [Pharos AI Agent Carnival](https://www.pharos.xyz/agent-carnival) Skill Hackathon, and inspired by [NVIDIA/SkillSpector](https://github.com/NVIDIA/SkillSpector).
@@ -146,6 +146,8 @@ python -m pytest --cov=pharos_skill_inspector --cov-report=term-missing
 
 ## License
 
-MIT-0 (No Attribution Required). See [LICENSE](./LICENSE).
+Proprietary software. Copyright (c) 2026 Arraya. All rights reserved. Use,
+copying, modification, or distribution requires prior written permission. See
+[LICENSE](./LICENSE).
 
 Not affiliated with or endorsed by Pharos or NVIDIA. "SkillSpector" is referenced as prior art.

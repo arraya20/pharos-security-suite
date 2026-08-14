@@ -1,6 +1,6 @@
 """Pharos Skill Inspector.
 
-Open-source security scanner for Pharos AI agent skills.
+Proprietary security scanner for Pharos AI agent skills.
 
 Detects prompt injection, data leakage, vulnerable dependencies, dangerous
 code, and Pharos-specific on-chain (Web3) risks in skills built for the

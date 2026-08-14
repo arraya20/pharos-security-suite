@@ -22,7 +22,7 @@
       "prefix": "address-intelligence",
       "repository": "https://github.com/arraya20/pharos-address-intelligence.git",
       "branch": "main",
-      "commit": "0970ccb9065326aa3f38ef22ebc3cf56af4c0903",
+      "commit": "3ee20c9626baaaa7a3e105abbe90fcb2a3c20eeb",
       "requiredFiles": ["package.json", "README.md", "scripts/lib/socialscan.mjs", "test/socialscan.test.js"]
     }
   ]

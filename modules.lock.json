@@ -6,7 +6,7 @@
       "prefix": "skill-inspector",
       "repository": "https://github.com/arraya20/pharos_skill_inspector.git",
       "branch": "main",
-      "commit": "a0ca64e1b42b0021eca6ba29dc34f047a781835f",
+      "commit": "77a0702520694c44e6b5ec60852942c119553784",
       "requiredFiles": ["pyproject.toml", "README.md", "src/pharos_skill_inspector/__init__.py"]
     },
     {
@@ -14,7 +14,7 @@
       "prefix": "contract-inspector",
       "repository": "https://github.com/arraya20/pharos-contract-inspector.git",
       "branch": "master",
-      "commit": "820ff89e5d766e6a4439e25cc4d3cf4f745644e1",
+      "commit": "41a1fd70f9a9ff042b431b92c310bb49af400070",
       "requiredFiles": ["package.json", "README.md", "server.js", "test-server.js"]
     },
     {
@@ -22,7 +22,7 @@
       "prefix": "address-intelligence",
       "repository": "https://github.com/arraya20/pharos-address-intelligence.git",
       "branch": "main",
-      "commit": "9ccec4ef9285e37a7a7c29b0d6f2ceaef0ad08a6",
+      "commit": "0970ccb9065326aa3f38ef22ebc3cf56af4c0903",
       "requiredFiles": ["package.json", "README.md", "scripts/lib/socialscan.mjs", "test/socialscan.test.js"]
     }
   ]

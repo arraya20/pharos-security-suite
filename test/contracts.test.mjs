@@ -154,3 +154,23 @@ test("rejects invalid scores and result statuses", () => {
     /status must be one of/i
   );
 });
+
+test("rejects non-finite numbers in normalized results", () => {
+  assert.throws(
+    () => validateAssessmentResult({
+      schemaVersion: "1.0",
+      assessmentId: "assessment-1",
+      targetType: "ADDRESS",
+      status: "COMPLETE",
+      risk: { score: Number.NaN, level: "CRITICAL" },
+      findings: [],
+      evidence: [],
+      warnings: [],
+      confidence: "FULL",
+      timing: { startedAt: "2026-07-31T00:00:00.000Z", durationMs: 1 },
+      source: { module: "address-intelligence", version: "0.1.0" },
+      details: {},
+    }),
+    /finite/i
+  );
+});

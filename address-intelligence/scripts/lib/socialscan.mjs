@@ -94,6 +94,7 @@ export function createSocialScanProvider({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   activityPageSize = DEFAULT_ACTIVITY_PAGE_SIZE,
   getLatestBlock,
+  signal = null,
 } = {}) {
   const missingReason = !baseUrl
     ? "no SocialScan API configured"
@@ -112,12 +113,15 @@ export function createSocialScanProvider({
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      const requestSignal = signal
+        ? AbortSignal.any([controller.signal, signal])
+        : controller.signal;
       const res = await fetchImpl(url, {
         headers: {
           Accept: "application/json",
           "x-api-key": apiKey,
         },
-        signal: controller.signal,
+        signal: requestSignal,
       });
       if (!res.ok) throw new Error(`SocialScan HTTP ${res.status}`);
       const json = await res.json();

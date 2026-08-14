@@ -235,4 +235,6 @@ pricing to `Free` during beta to avoid paid-call failures.
 
 ## License
 
-MIT-0 (No Attribution Required)
+Proprietary software. Copyright (c) 2026 Arraya. All rights reserved. Use,
+copying, modification, or distribution requires prior written permission. See
+[LICENSE](./LICENSE).

@@ -210,3 +210,30 @@ test("does not expose an untrusted upstream message in invalid-response errors",
   assert.equal(info.available, false);
   assert.equal(info.reason, "SocialScan invalid response");
 });
+
+test("propagates the parent cancellation signal to SocialScan requests", async () => {
+  const controller = new AbortController();
+  let upstreamAborted = false;
+  const provider = createSocialScanProvider({
+    baseUrl: BASE_URL,
+    apiKey: "test-secret",
+    signal: controller.signal,
+    fetchImpl: async (_url, options) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(response([])), 30);
+      options.signal.addEventListener("abort", () => {
+        upstreamAborted = true;
+        clearTimeout(timer);
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true });
+    }),
+  });
+
+  const pending = provider.contractInfo(ADDRESS);
+  controller.abort();
+  const result = await pending;
+
+  assert.equal(upstreamAborted, true);
+  assert.equal(result.available, false);
+});

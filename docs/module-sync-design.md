@@ -2,7 +2,7 @@
 
 ## Understanding
 
-- The suite is the public, clone-ready distribution of three canonical security tools.
+- The suite is the source-available proprietary distribution of three canonical security tools.
 - Each bundled module must remain independently runnable.
 - A normal clone must include all source code without a submodule initialization step.
 - Root CI must validate Python, both Node modules, packaging, and module provenance.

@@ -324,6 +324,34 @@ test("reports analyzer failures as upstream errors instead of invalid input", as
   );
 });
 
+test("rejects structurally invalid reports and does not cache them", async () => {
+  let calls = 0;
+  await withServer(
+    {
+      analyze: async () => {
+        calls += 1;
+        return sampleAnalysis;
+      },
+      build: () => ({ bogus: true }),
+    },
+    async (baseUrl) => {
+      const request = () => fetch(`${baseUrl}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: sampleAnalysis.address,
+          network: "mainnet",
+          offline: true,
+        }),
+      });
+
+      assert.equal((await request()).status, 500);
+      assert.equal((await request()).status, 500);
+      assert.equal(calls, 2);
+    }
+  );
+});
+
 test("maps structured analyzer validation errors to 400", async () => {
   await withServer(
     {

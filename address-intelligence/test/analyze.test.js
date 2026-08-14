@@ -16,6 +16,27 @@ test("rejects unknown networks before making RPC calls", async () => {
   );
 });
 
+test("rejects an RPC endpoint connected to the wrong chain", async () => {
+  let snapshotCalls = 0;
+  const fakeRpc = {
+    chainId: async () => "0x1",
+    getBlockNumber: async () => {
+      snapshotCalls += 1;
+      return "0x10";
+    },
+  };
+
+  await assert.rejects(
+    () => analyzeAddress(
+      "0x0000000000000000000000000000000000000001",
+      "pacific_mainnet",
+      { rpc: fakeRpc, offline: true }
+    ),
+    /RPC chainId mismatch/i
+  );
+  assert.ok(snapshotCalls <= 1);
+});
+
 test("formats raw integer token units into decimal strings", () => {
   assert.equal(formatUnits("0xde0b6b3a7640000", 18), "1");
   assert.equal(formatUnits("0x5f5e100", 6), "100");
@@ -25,6 +46,7 @@ test("formats raw integer token units into decimal strings", () => {
 test("degrades without calling SocialScan when its API key is missing", async () => {
   let explorerCalls = 0;
   const fakeRpc = {
+    chainId: async () => "0x688",
     getBlockNumber: async () => "0x10",
     getCode: async () => "0x",
     getBalance: async () => "0x0",
@@ -54,6 +76,7 @@ test("degrades without calling SocialScan when its API key is missing", async ()
 
 test("marks the tracked token scan incomplete when an RPC balance call fails", async () => {
   const fakeRpc = {
+    chainId: async () => "0x688",
     getBlockNumber: async () => "0x10",
     getCode: async () => "0x",
     getBalance: async () => "0x0",
@@ -92,6 +115,7 @@ test("pins core RPC reads to one snapshot and starts independent reads concurren
     return value;
   };
   const fakeRpc = {
+    chainId: async () => "0x688",
     getBlockNumber: async () => snapshot,
     getCode: async (_address, block) => delayed(block, "0x"),
     getBalance: async (_address, block) => delayed(block, "0x0"),
@@ -118,6 +142,7 @@ test("maps SocialScan enrichment and starts explorer calls in parallel", async (
   let inFlight = 0;
   let maxInFlight = 0;
   const fakeRpc = {
+    chainId: async () => "0x688",
     getCode: async () => "0x1234",
     getBalance: async () => "0x0",
     getBlockNumber: async () => "0x3d090",

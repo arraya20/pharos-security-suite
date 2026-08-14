@@ -226,4 +226,19 @@ const ZERO = "0x" + "0".repeat(64);
   assert.equal(erc1155.supported, false);
 }
 
+{
+  const rpc = new MockRpc();
+  rpc.ethCallSafe = async () => ({
+    ok: false,
+    data: null,
+    transient: true,
+    error: "RPC timeout",
+  });
+  const [result] = await probeInterfaces(rpc, "0xnft", {
+    "0x80ac58cd": "ERC721",
+  });
+  assert.equal(result.supported, false);
+  assert.equal(result.error, "RPC timeout");
+}
+
 console.log("proxy + decode tests passed");

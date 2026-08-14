@@ -117,7 +117,10 @@ export function validateAssessmentResult(input) {
   if (input.risk !== undefined && input.risk !== null) {
     assertObject(input.risk, "risk");
     assertAllowedKeys(input.risk, new Set(["score", "level"]), "risk");
-    if (typeof input.risk.score !== "number" || input.risk.score < 0 || input.risk.score > 100) {
+    if (!Number.isFinite(input.risk.score)) {
+      throw new TypeError("risk score must be finite");
+    }
+    if (input.risk.score < 0 || input.risk.score > 100) {
       throw new TypeError("risk score must be between 0 and 100");
     }
     if (!RISK_LEVELS.has(input.risk.level)) throw new TypeError("unsupported risk level");
@@ -139,7 +142,7 @@ export function validateAssessmentResult(input) {
   if (Number.isNaN(Date.parse(input.timing.startedAt))) {
     throw new TypeError("timing.startedAt must be an ISO date-time");
   }
-  if (typeof input.timing.durationMs !== "number" || input.timing.durationMs < 0) {
+  if (!Number.isFinite(input.timing.durationMs) || input.timing.durationMs < 0) {
     throw new TypeError("timing.durationMs must be non-negative");
   }
   assertObject(input.source, "source");

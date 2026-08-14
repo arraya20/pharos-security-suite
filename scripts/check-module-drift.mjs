@@ -176,12 +176,11 @@ export function checkDocumentation({ root = ROOT }) {
   const skillVersion = skillProject.match(/^version\s*=\s*"([^"]+)"$/m)?.[1];
   if (!skillVersion) throw new Error("Unable to read Skill Inspector version");
 
-  const contractVersion = JSON.parse(
-    read("contract-inspector/package.json")
-  ).version;
-  const addressVersion = JSON.parse(
-    read("address-intelligence/package.json")
-  ).version;
+  const rootProject = JSON.parse(read("package.json"));
+  const contractProject = JSON.parse(read("contract-inspector/package.json"));
+  const addressProject = JSON.parse(read("address-intelligence/package.json"));
+  const contractVersion = contractProject.version;
+  const addressVersion = addressProject.version;
   const readme = read("README.md");
   const homepage = read("docs/index.html");
 
@@ -201,9 +200,40 @@ export function checkDocumentation({ root = ROOT }) {
     "contract-inspector/LICENSE",
     "address-intelligence/LICENSE",
   ]) {
-    if (!read(licensePath).startsWith("MIT No Attribution\n")) {
-      throw new Error(`${licensePath} must use MIT-0 text`);
+    if (!read(licensePath).startsWith("Proprietary Software License\n")) {
+      throw new Error(`${licensePath} must use the proprietary license text`);
     }
+  }
+
+  for (const [projectPath, project] of [
+    ["package.json", rootProject],
+    ["contract-inspector/package.json", contractProject],
+    ["address-intelligence/package.json", addressProject],
+  ]) {
+    if (project.license !== "UNLICENSED" || project.private !== true) {
+      throw new Error(`${projectPath} must be private and UNLICENSED`);
+    }
+  }
+  requireText(
+    skillProject,
+    'license = { text = "Proprietary" }',
+    "skill-inspector/pyproject.toml"
+  );
+  requireText(
+    skillProject,
+    '"License :: Other/Proprietary License"',
+    "skill-inspector/pyproject.toml"
+  );
+  for (const documentationPath of [
+    "README.md",
+    "skill-inspector/README.md",
+    "contract-inspector/README.md",
+    "contract-inspector/SKILL.md",
+    "address-intelligence/README.md",
+    "address-intelligence/SKILL.md",
+    "docs/index.html",
+  ]) {
+    requireText(read(documentationPath), "Proprietary software", documentationPath);
   }
 
   if (fs.existsSync(path.join(root, "trust-layer"))) {

@@ -4,6 +4,7 @@ import test from "node:test";
 import { BoundedTtlCache } from "../coordinator/cache.mjs";
 import { defineAdapter } from "../coordinator/adapters.mjs";
 import { createCoordinator } from "../coordinator/coordinator.mjs";
+import { createLocalNodeAdapters } from "../coordinator/local-node-adapters.mjs";
 
 const ADDRESS = "0x0000000000000000000000000000000000000001";
 
@@ -42,6 +43,23 @@ test("routes single target types only to their specialist", async () => {
   assert.equal(result.targetType, "ADDRESS");
   assert.equal(result.status, "COMPLETE");
   assert.deepEqual(result.risk, { score: 25, level: "MODERATE" });
+});
+
+test("local address adapter builds the native risk report", async () => {
+  const adapters = createLocalNodeAdapters({
+    analyze: async () => ({ address: ADDRESS, confidence: "full" }),
+    buildAddressReport: (analysis) => ({
+      ...analysis,
+      risk: { score: 25, level: "MODERATE" },
+    }),
+  });
+
+  const raw = await adapters.address.assess(
+    request("ADDRESS", { address: ADDRESS, network: "mainnet" }),
+    { signal: new AbortController().signal }
+  );
+
+  assert.deepEqual(raw.risk, { score: 25, level: "MODERATE" });
 });
 
 test("derives a stable risk level when a specialist returns only a score", async () => {
@@ -143,6 +161,99 @@ test("returns PARTIAL when one FULL specialist fails", async () => {
   assert.equal(result.confidence, "PARTIAL");
   assert.equal(result.warnings[0].code, "SPECIALIST_FAILED");
   assert.doesNotMatch(result.warnings[0].message, /private upstream/i);
+});
+
+test("does not normalize or cache a failed specialist response as complete", async () => {
+  let calls = 0;
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        calls += 1;
+        return {
+          status: "FAILED",
+          risk: { score: Number.NaN, level: "CRITICAL" },
+        };
+      }),
+    },
+    cacheTtlMs: 1000,
+  });
+  const input = request("ADDRESS", { address: ADDRESS, network: "mainnet" });
+
+  const first = await coordinator.assess(input);
+  const second = await coordinator.assess(input);
+
+  assert.equal(first.status, "FAILED");
+  assert.equal(second.status, "FAILED");
+  assert.equal(calls, 2);
+  assert.equal(second.details.cache.status, "MISS");
+});
+
+test("rejects nested non-finite specialist data and serializes bigint details", async () => {
+  let calls = 0;
+  const invalid = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        calls += 1;
+        return { risk: { score: 5, level: "LOW" }, metrics: { value: Number.NaN } };
+      }),
+    },
+    cacheTtlMs: 1000,
+  });
+  const input = request("ADDRESS", { address: ADDRESS, network: "mainnet" });
+  assert.equal((await invalid.assess(input)).status, "FAILED");
+  assert.equal((await invalid.assess(input)).status, "FAILED");
+  assert.equal(calls, 2);
+
+  const valid = createCoordinator({
+    adapters: {
+      contract: adapter("contract-inspector", "1.1.0", async () => ({
+        risk: { score: 5, level: "Low" },
+        metadata: { totalSupply: 10n, errors: [] },
+      })),
+    },
+  });
+  const result = await valid.assess(
+    request("CONTRACT", { address: ADDRESS, network: "mainnet" })
+  );
+  assert.equal(result.details.metadata.totalSupply, "10");
+  assert.doesNotThrow(() => JSON.stringify(result));
+});
+
+test("rejects and does not cache an empty specialist response", async () => {
+  let calls = 0;
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        calls += 1;
+        return {};
+      }),
+    },
+    cacheTtlMs: 1000,
+  });
+  const input = request("ADDRESS", { address: ADDRESS, network: "mainnet" });
+
+  assert.equal((await coordinator.assess(input)).status, "FAILED");
+  assert.equal((await coordinator.assess(input)).status, "FAILED");
+  assert.equal(calls, 2);
+});
+
+test("marks a specialist with incomplete security probes as partial", async () => {
+  const coordinator = createCoordinator({
+    adapters: {
+      contract: adapter("contract-inspector", "1.1.0", async () => ({
+        risk: { score: 8, level: "Low" },
+        incomplete: [{ code: "PROXY_PROBE_FAILED", message: "Proxy probe was incomplete." }],
+      })),
+    },
+  });
+
+  const result = await coordinator.assess(
+    request("CONTRACT", { address: ADDRESS, network: "mainnet" })
+  );
+
+  assert.equal(result.status, "PARTIAL");
+  assert.equal(result.confidence, "PARTIAL");
+  assert.equal(result.warnings[0].code, "PROXY_PROBE_FAILED");
 });
 
 test("returns TIMEOUT and aborts the adapter when the budget expires", async () => {

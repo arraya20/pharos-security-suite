@@ -106,7 +106,12 @@ export async function probeInterfaces(rpc, addr, interfaceIds, block = "latest")
     const data = "0x01ffc9a7" + id.slice(2).padEnd(64, "0");
     const res = await rpc.ethCallSafe(addr, data, block);
     const supported = Boolean(res.ok && res.data && res.data !== "0x" && res.data.slice(-2) === "01");
-    results.push({ id, name, supported });
+    results.push({
+      id,
+      name,
+      supported,
+      ...(!res.ok && res.transient ? { error: res.error || "RPC failure" } : {}),
+    });
   }
   return results;
 }

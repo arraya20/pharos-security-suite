@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Clone-ready distribution of the Pharos security inspection tools.",
-  "license": "MIT-0",
+  "description": "Proprietary distribution of the Pharos security inspection tools.",
+  "license": "UNLICENSED",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "lint": "find coordinator scripts test -type f -name '*.mjs' -exec node --check {} +",

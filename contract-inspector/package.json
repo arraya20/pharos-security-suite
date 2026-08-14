@@ -1,6 +1,7 @@
 {
   "name": "pharos-contract-inspector",
   "version": "1.1.0",
+  "private": true,
   "description": "ABI-free EVM contract introspection for the Pharos Agent Center. Point it at any address on Pharos and get a function inventory, proxy resolution, interface detection, and a privileged/danger function report — straight from bytecode, no verified source required.",
   "type": "module",
   "bin": {
@@ -26,7 +27,7 @@
     "bytecode"
   ],
   "author": "arraya20",
-  "license": "MIT-0",
+  "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arraya20/pharos-contract-inspector.git"

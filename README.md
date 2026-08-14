@@ -256,5 +256,6 @@ Built for [Pharos Network](https://pharos.xyz) — an EVM-compatible L1 with nat
 
 ## License
 
-MIT-0 (No Attribution Required). The root distribution and all three pinned
-modules use MIT-0; see each module's `LICENSE` file.
+Proprietary software. Copyright (c) 2026 Arraya. All rights reserved. Use,
+copying, modification, or distribution requires prior written permission. See
+[LICENSE](./LICENSE).

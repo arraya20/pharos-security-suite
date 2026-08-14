@@ -113,6 +113,29 @@ function parseAnalyzePayload(body) {
   return { address, networkKey, offline };
 }
 
+function validateAnalysisReport(report, address) {
+  if (
+    !report ||
+    typeof report !== "object" ||
+    Array.isArray(report) ||
+    typeof report.address !== "string" ||
+    report.address.toLowerCase() !== address.toLowerCase() ||
+    !Number.isSafeInteger(report.chainId) ||
+    !["EOA", "Contract"].includes(report.addressType) ||
+    !report.classification ||
+    typeof report.classification !== "object" ||
+    !report.risk ||
+    typeof report.risk !== "object" ||
+    !Number.isFinite(report.risk.score) ||
+    report.risk.score < 0 ||
+    report.risk.score > 100 ||
+    typeof report.risk.level !== "string"
+  ) {
+    throw new TypeError("invalid address analysis report");
+  }
+  return report;
+}
+
 export function createServer({
   analyze = analyzeAddress,
   build = defaultBuildReport,
@@ -262,7 +285,7 @@ export function createServer({
         throw new ServiceError(504, "analysis deadline exceeded");
       }
       try {
-        return build(data);
+        return validateAnalysisReport(build(data), address);
       } catch {
         throw new ServiceError(500, "internal report failure");
       }

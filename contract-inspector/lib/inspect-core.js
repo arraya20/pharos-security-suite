@@ -6,7 +6,7 @@ import { disassemble } from "./disasm.js";
 import { KNOWN, PRIVILEGED, FINGERPRINTS, INTERFACE_IDS } from "./signatures.js";
 import { resolveProxy } from "./proxy.js";
 import { readMetadata, probeInterfaces } from "./decode.js";
-import { resolveMany } from "./fourbyte.js";
+import { resolveManyDetailed } from "./fourbyte.js";
 import { assessRisk } from "./risk.js";
 import { formatUnits } from "./format.js";
 
@@ -81,6 +81,13 @@ export async function inspectContract({
 
   const dis = disassemble(codeHex);
   const proxy = await resolveProxy(rpc, address, codeHex, snapshotBlock);
+  const incomplete = [];
+  if (proxy.errors?.length) {
+    incomplete.push({
+      code: "PROXY_PROBE_FAILED",
+      message: "One or more proxy detection probes failed; upgradeability may be under-reported.",
+    });
+  }
   let implDis = null;
   if (proxy.isProxy && proxy.impl) {
     const implCode = await rpc.getCode(proxy.impl, snapshotBlock);
@@ -98,7 +105,16 @@ export async function inspectContract({
   }
 
   let resolved = {};
-  if (unknown.length > 0 && online) resolved = await resolveMany(unknown);
+  if (unknown.length > 0 && online) {
+    const lookup = await resolveManyDetailed(unknown, { signal });
+    resolved = lookup.signatures;
+    if (lookup.errors.length) {
+      incomplete.push({
+        code: "SELECTOR_LOOKUP_FAILED",
+        message: "One or more selector signature lookups failed; function classification may be incomplete.",
+      });
+    }
+  }
   const resolvedFunctions = Object.entries(resolved).filter(([, v]) => v).map(([selector, signature]) => ({ selector, signature }));
   const unresolvedSelectors = unknown.filter((s) => !resolved[s]);
 
@@ -106,6 +122,12 @@ export async function inspectContract({
   if (known.some((k) => k.selector === "0x01ffc9a7")) {
     const probed = await probeInterfaces(rpc, address, INTERFACE_IDS, snapshotBlock);
     for (const p of probed) if (p.supported) interfaces.push(p.name);
+    if (probed.some((result) => result.error)) {
+      incomplete.push({
+        code: "INTERFACE_PROBE_FAILED",
+        message: "One or more interface probes failed; detected standards may be incomplete.",
+      });
+    }
   }
 
   const standards = detectStandards(dis.selectors, interfaces, implDis?.selectors || []);
@@ -140,6 +162,7 @@ export async function inspectContract({
     },
     dangerous,
     risk,
+    ...(incomplete.length ? { incomplete } : {}),
     opcodeSignals: {
       hasDelegateCall: dis.hasDelegateCall,
       hasSelfdestruct: dis.hasSelfdestruct,

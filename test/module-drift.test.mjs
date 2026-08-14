@@ -74,7 +74,7 @@ test("the checked-in module snapshots match their locked subtree commits", () =>
   });
 });
 
-test("suite documentation matches module versions, licenses, and roadmap state", () => {
+test("suite documentation matches module versions, proprietary licenses, and roadmap state", () => {
   assert.deepEqual(checkDocumentation({ root: ROOT }), {
     skillInspector: "0.1.0",
     contractInspector: "1.1.0",

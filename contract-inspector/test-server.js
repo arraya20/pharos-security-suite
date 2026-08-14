@@ -105,6 +105,28 @@ async function withServer(options, fn) {
   let calls = 0;
   await withServer(
     {
+      inspect: async () => {
+        calls += 1;
+        return { bogus: true };
+      },
+    },
+    async (baseUrl) => {
+      const request = () => fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: ADDRESS }),
+      });
+      assert.equal((await request()).status, 502);
+      assert.equal((await request()).status, 502);
+      assert.equal(calls, 2, "invalid reports must not be cached");
+    },
+  );
+}
+
+{
+  let calls = 0;
+  await withServer(
+    {
       cacheTtlMs: 60_000,
       inspect: async () => {
         calls += 1;

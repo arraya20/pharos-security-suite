@@ -25,7 +25,7 @@ function riskFrom(raw) {
     (typeof raw?.score === "number"
       ? { score: raw.score, level: raw.severity || raw.level }
       : null);
-  if (!candidate || typeof candidate.score !== "number") return null;
+  if (!candidate || !Number.isFinite(candidate.score)) return null;
   const normalizedLevel = candidate.level
     ? String(candidate.level).toUpperCase()
     : null;
@@ -37,8 +37,89 @@ function riskFrom(raw) {
   };
 }
 
+function assertSpecialistResult(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError("specialist result must be an object");
+  }
+  if (raw.status !== undefined && !["COMPLETE", "PARTIAL"].includes(raw.status)) {
+    throw new TypeError("specialist did not return a successful result");
+  }
+  if (raw.address !== undefined && !/^0x[0-9a-fA-F]{40}$/.test(raw.address)) {
+    throw new TypeError("specialist address is invalid");
+  }
+  if (raw.risk !== undefined) {
+    if (!raw.risk || typeof raw.risk !== "object" || Array.isArray(raw.risk)) {
+      throw new TypeError("specialist risk must be an object");
+    }
+    if (!Number.isFinite(raw.risk.score)) {
+      throw new TypeError("specialist risk score must be finite");
+    }
+  }
+  if (raw.score !== undefined && !Number.isFinite(raw.score)) {
+    throw new TypeError("specialist score must be finite");
+  }
+  for (const field of ["findings", "evidence", "incomplete"]) {
+    if (raw[field] !== undefined && !Array.isArray(raw[field])) {
+      throw new TypeError(`specialist ${field} must be an array`);
+    }
+  }
+  for (const warning of raw.incomplete || []) {
+    if (
+      !warning ||
+      typeof warning !== "object" ||
+      Array.isArray(warning) ||
+      typeof warning.code !== "string" ||
+      warning.code.length === 0 ||
+      warning.code.length > 128 ||
+      typeof warning.message !== "string" ||
+      warning.message.length === 0 ||
+      warning.message.length > 1000
+    ) {
+      throw new TypeError("specialist incomplete warning is invalid");
+    }
+  }
+  const hasAssessmentData =
+    raw.risk !== undefined ||
+    raw.score !== undefined ||
+    raw.address !== undefined ||
+    (Array.isArray(raw.findings) && raw.findings.length > 0);
+  if (!hasAssessmentData) {
+    throw new TypeError("specialist result is missing assessment data");
+  }
+}
+
+function sanitizeSpecialistValue(value, seen = new Set()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("specialist data contains a non-finite number");
+    return value;
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value !== "object") {
+    throw new TypeError("specialist data contains a non-serializable value");
+  }
+  if (seen.has(value)) throw new TypeError("specialist data contains a cycle");
+  seen.add(value);
+  let sanitized;
+  if (Array.isArray(value)) {
+    sanitized = value.map((item) => sanitizeSpecialistValue(item, seen));
+  } else {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("specialist data must contain only plain objects");
+    }
+    sanitized = Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, sanitizeSpecialistValue(item, seen)])
+    );
+  }
+  seen.delete(value);
+  return sanitized;
+}
+
 function warningsFrom(raw) {
-  const warnings = [];
+  const warnings = (raw.incomplete || []).map(({ code, message }) => ({ code, message }));
   if (Array.isArray(raw?.metadata?.errors) && raw.metadata.errors.length) {
     warnings.push({
       code: "INCOMPLETE_METADATA",
@@ -49,6 +130,12 @@ function warningsFrom(raw) {
     warnings.push({
       code: "PARTIAL_DATA",
       message: "The specialist completed with partial upstream data.",
+    });
+  }
+  if (raw.status === "PARTIAL" && warnings.length === 0) {
+    warnings.push({
+      code: "SPECIALIST_PARTIAL",
+      message: "The specialist reported an incomplete assessment.",
     });
   }
   return warnings;
@@ -62,24 +149,26 @@ export function normalizeSpecialistResult({
   startedAt,
   durationMs,
 }) {
-  const warnings = warningsFrom(raw);
+  assertSpecialistResult(raw);
+  const sanitizedRaw = sanitizeSpecialistValue(raw);
+  const warnings = warningsFrom(sanitizedRaw);
   return {
     schemaVersion: "1.0",
     assessmentId,
     targetType: MODULE_TARGET_TYPES[key],
     status: warnings.length ? "PARTIAL" : "COMPLETE",
-    risk: riskFrom(raw),
-    findings: Array.isArray(raw?.findings)
-      ? raw.findings
-      : Array.isArray(raw?.risk?.flags)
-        ? raw.risk.flags
+    risk: riskFrom(sanitizedRaw),
+    findings: Array.isArray(sanitizedRaw?.findings)
+      ? sanitizedRaw.findings
+      : Array.isArray(sanitizedRaw?.risk?.flags)
+        ? sanitizedRaw.risk.flags
         : [],
-    evidence: Array.isArray(raw?.evidence) ? raw.evidence : [],
+    evidence: Array.isArray(sanitizedRaw?.evidence) ? sanitizedRaw.evidence : [],
     warnings,
     confidence: warnings.length ? "PARTIAL" : "FULL",
     timing: { startedAt, durationMs },
     source: { module: adapter.module, version: adapter.version },
-    details: raw,
+    details: sanitizedRaw,
   };
 }
 

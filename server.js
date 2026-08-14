@@ -107,6 +107,30 @@ function retryAfterSeconds(resetAt) {
   return String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)));
 }
 
+function validateInspectionReport(report, input) {
+  if (
+    !report ||
+    typeof report !== "object" ||
+    Array.isArray(report) ||
+    typeof report.address !== "string" ||
+    report.address.toLowerCase() !== input.address.toLowerCase() ||
+    !["EOA", "Contract"].includes(report.type)
+  ) {
+    throw new TypeError("invalid contract inspection report");
+  }
+  if (
+    report.risk !== undefined &&
+    (!report.risk ||
+      typeof report.risk !== "object" ||
+      !Number.isFinite(report.risk.score) ||
+      report.risk.score < 0 ||
+      report.risk.score > 100)
+  ) {
+    throw new TypeError("invalid contract inspection risk");
+  }
+  return report;
+}
+
 export function createServer({
   inspect = inspectContract,
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
@@ -184,6 +208,7 @@ export function createServer({
       }),
     ])
       .then((report) => {
+        validateInspectionReport(report, input);
         cacheReport(key, report);
         return report;
       })

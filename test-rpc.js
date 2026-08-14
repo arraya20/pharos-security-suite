@@ -13,13 +13,14 @@ function mockFetch(sequence) {
   const calls = [];
   globalThis.fetch = async (_url, opts) => {
     const step = sequence[Math.min(i, sequence.length - 1)];
+    const requestId = JSON.parse(opts.body).id;
     i++;
     calls.push({ step: step.kind });
     if (step.kind === "ok") {
-      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: step.result }), { status: 200 });
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: requestId, result: step.result }), { status: 200 });
     }
     if (step.kind === "rpcerror") {
-      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: step.code ?? -32000, message: step.message ?? "execution reverted" } }), { status: 200 });
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: requestId, error: { code: step.code ?? -32000, message: step.message ?? "execution reverted" } }), { status: 200 });
     }
     if (step.kind === "http5xx") return new Response("server error", { status: step.status ?? 503 });
     if (step.kind === "http4xx") return new Response("bad request", { status: step.status ?? 400 });
@@ -193,4 +194,103 @@ console.log("rpc tests passed");
   const pending = rpc.getBlockNumber();
   controller.abort();
   await assert.rejects(() => pending, /RPC aborted/i);
+}
+
+// External cancellation is terminal: it must not consume the retry budget.
+{
+  const controller = new AbortController();
+  let calls = 0;
+  const rpc = new Rpc("https://rpc.example", {
+    retries: 2,
+    retryBaseMs: 1,
+    signal: controller.signal,
+    fetchImpl: async (_url, options) => new Promise((_, reject) => {
+      calls += 1;
+      options.signal.addEventListener("abort", () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true });
+    }),
+  });
+  const pending = rpc.getBlockNumber();
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(() => pending, /RPC aborted/i);
+  assert.equal(calls, 1, "an aborted RPC must not retry");
+}
+
+// Once a hedged provider wins, the slower request must be cancelled.
+{
+  let primaryAborted = false;
+  const pool = new RpcPool(
+    [
+      {
+        label: "primary",
+        call: async (_method, _params, context = {}) =>
+          new Promise((_, reject) => {
+            context.signal?.addEventListener("abort", () => {
+              primaryAborted = true;
+              const error = new Error("hedged request cancelled");
+              error.name = "AbortError";
+              reject(error);
+            });
+          }),
+      },
+      { label: "secondary", call: async () => "secondary" },
+    ],
+    { hedgeDelayMs: 1 },
+  );
+  assert.equal(await pool.call("eth_blockNumber"), "secondary");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(primaryAborted, true, "the losing hedge must be aborted");
+}
+
+// A 200 response is still untrusted JSON-RPC data.
+for (const payload of [
+  { jsonrpc: "2.0", id: 999, result: "0x1" },
+  { jsonrpc: "2.0", id: 1 },
+  { jsonrpc: "1.0", id: 1, result: "0x1" },
+  { jsonrpc: "2.0", id: 1, result: "0x1", error: { code: -1, message: "both" } },
+]) {
+  const rpc = new Rpc("https://rpc.example", {
+    retries: 0,
+    fetchImpl: async () => new Response(JSON.stringify(payload), { status: 200 }),
+  });
+  await assert.rejects(() => rpc.chainId(), /invalid JSON-RPC response/i);
+}
+
+{
+  const rpc = new Rpc("https://rpc.example", {
+    retries: 0,
+    fetchImpl: async () => new Response(
+      JSON.stringify({ jsonrpc: "2.0", id: 1, result: "mainnet" }),
+      { status: 200 },
+    ),
+  });
+  await assert.rejects(() => rpc.chainId(), /invalid JSON-RPC result/i);
+}
+
+{
+  const rpc = new Rpc("https://rpc.example", {
+    retries: 0,
+    timeoutMs: 5,
+    fetchImpl: async (_url, options) => ({
+      ok: true,
+      json: async () => new Promise((_, reject) => {
+        options.signal.addEventListener("abort", () => {
+          const error = new Error("body aborted");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      }),
+    }),
+  });
+  await assert.rejects(
+    () => Promise.race([
+      rpc.chainId(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("body remained pending")), 30)),
+    ]),
+    /RPC timeout/i,
+  );
 }

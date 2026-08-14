@@ -220,4 +220,6 @@ pharos-contract-inspector/
 
 ## License
 
-MIT-0
+Proprietary software. Copyright (c) 2026 Arraya. All rights reserved. Use,
+copying, modification, or distribution requires prior written permission. See
+[LICENSE](./LICENSE).

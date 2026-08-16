@@ -77,6 +77,10 @@ curl -X POST http://127.0.0.1:8790/inspect \
 node inspect.js 0x... --rpc https://atlantic.dplabs-internal.com
 ```
 
+Hosted deployments must set `API_KEY`; it is enforced whenever configured,
+including when the server binds to loopback behind a reverse proxy. A non-loopback
+bind without `API_KEY` is rejected at startup.
+
 ## What It Reports
 
 ### 1. Proxy Detection

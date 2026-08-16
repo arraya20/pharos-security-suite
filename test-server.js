@@ -29,6 +29,25 @@ async function withServer(options, fn) {
 }
 
 {
+  await withServer(
+    {
+      host: "127.0.0.1",
+      apiKey: "test-secret",
+      inspect: async () => ({ address: ADDRESS, type: "EOA" }),
+    },
+    async (baseUrl) => {
+      const request = (headers = {}) => fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ address: ADDRESS }),
+      });
+      assert.equal((await request()).status, 401);
+      assert.equal((await request({ Authorization: "Bearer test-secret" })).status, 200);
+    },
+  );
+}
+
+{
   await withServer({}, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/inspect`, {
       method: "POST",
@@ -197,6 +216,40 @@ async function withServer(options, fn) {
     },
   );
   assert.equal(aborted, true);
+}
+
+{
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => { started = resolve; });
+  const upstream = new Promise((resolve) => { release = resolve; });
+  await withServer(
+    {
+      requestTimeoutMs: 5,
+      maxConcurrentInspections: 1,
+      inspect: async ({ signal }) => {
+        started();
+        signal.addEventListener("abort", () => {});
+        await upstream;
+        return { address: ADDRESS, type: "Contract" };
+      },
+    },
+    async (baseUrl) => {
+      const request = (address) => fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const firstPromise = request(ADDRESS);
+      await startedPromise;
+      const first = await firstPromise;
+      assert.equal(first.status, 504);
+      const second = await request(SECOND_ADDRESS);
+      assert.equal(second.status, 503);
+      assert.equal((await second.json()).error, "inspection_capacity_exceeded");
+      release();
+    },
+  );
 }
 
 {

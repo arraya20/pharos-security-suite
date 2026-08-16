@@ -108,6 +108,7 @@ Hosted deployments should also configure:
 | `RATE_LIMIT_MAX_BUCKETS` | `10000` | Upper bound for tracked client buckets. |
 | `REQUEST_TIMEOUT_MS` | `20000` | Request socket timeout. |
 | `MAX_CONCURRENT_INSPECTIONS` | `4` | Unique inspections allowed in flight; excess work fails fast with HTTP 503. |
+| `API_KEY` | unset | Required when `HOST` is non-loopback and enforced whenever configured; send as `Authorization: Bearer ...` or `X-API-Key`. |
 
 ## Example Output
 

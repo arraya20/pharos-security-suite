@@ -3,6 +3,7 @@
 // POST /inspect { address, network?, offline? }
 
 import http from "node:http";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { inspectContract, jsonStringify } from "./lib/inspect-core.js";
 
@@ -13,6 +14,7 @@ function envNumber(name, fallback) {
 
 const PORT = Number(process.env.PORT || 8790);
 const HOST = process.env.HOST || "127.0.0.1";
+const API_KEY = process.env.API_KEY || process.env.AUTH_TOKEN || null;
 const DEFAULT_MAX_BODY_BYTES = envNumber("MAX_BODY_BYTES", 64 * 1024);
 const DEFAULT_RATE_LIMIT_MAX = envNumber("RATE_LIMIT_MAX", 60);
 const DEFAULT_RATE_LIMIT_WINDOW_MS = envNumber("RATE_LIMIT_WINDOW_MS", 60_000);
@@ -107,6 +109,19 @@ function retryAfterSeconds(resetAt) {
   return String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)));
 }
 
+function isLoopbackHost(host) {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
+
+function hasValidAuth(req, apiKey) {
+  const bearer = String(req.headers.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
+  const supplied = bearer || req.headers["x-api-key"];
+  if (!apiKey || typeof supplied !== "string") return false;
+  const expected = Buffer.from(apiKey);
+  const actual = Buffer.from(supplied);
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
 function validateInspectionReport(report, input) {
   if (
     !report ||
@@ -141,9 +156,14 @@ export function createServer({
   cacheTtlMs = DEFAULT_CACHE_TTL_MS,
   cacheMaxEntries = DEFAULT_CACHE_MAX_ENTRIES,
   maxConcurrentInspections = DEFAULT_MAX_CONCURRENT_INSPECTIONS,
+  host = HOST,
+  apiKey = API_KEY,
 } = {}) {
   if (!Number.isInteger(maxConcurrentInspections) || maxConcurrentInspections < 1) {
     throw new TypeError("maxConcurrentInspections must be a positive integer");
+  }
+  if (!isLoopbackHost(host) && !apiKey) {
+    throw new TypeError("API_KEY is required when HOST is non-local");
   }
   const buckets = new Map();
   const cache = new Map();
@@ -197,8 +217,23 @@ export function createServer({
     const controller = new AbortController();
     activeInspections += 1;
     let timeout;
+    const workPromise = Promise.resolve()
+      .then(() => inspect({ ...input, signal: controller.signal }))
+      .then((report) => {
+        validateInspectionReport(report, input);
+        cacheReport(key, report);
+        return report;
+      });
+    // A request timeout only ends the caller-facing race. The inspection may
+    // ignore AbortSignal, so keep the slot and coalescing entry until the
+    // actual upstream promise settles.
+    const settledPromise = workPromise.finally(() => {
+      activeInspections -= 1;
+      inFlight.delete(key);
+    });
+    settledPromise.catch(() => {});
     const job = Promise.race([
-      inspect({ ...input, signal: controller.signal }),
+      workPromise,
       new Promise((_, reject) => {
         timeout = setTimeout(() => {
           reject(new ServiceError(504, "inspection_timeout", "Contract inspection timed out"));
@@ -206,17 +241,7 @@ export function createServer({
         }, requestTimeoutMs);
         timeout.unref?.();
       }),
-    ])
-      .then((report) => {
-        validateInspectionReport(report, input);
-        cacheReport(key, report);
-        return report;
-      })
-      .finally(() => {
-        clearTimeout(timeout);
-        activeInspections -= 1;
-        inFlight.delete(key);
-      });
+    ]).finally(() => clearTimeout(timeout));
     inFlight.set(key, job);
     return { report: await job, cacheStatus: "MISS" };
   }
@@ -263,6 +288,12 @@ export function createServer({
           ok: true,
           service: "pharos-contract-inspector",
           endpoints: ["POST /inspect"],
+        });
+      }
+
+      if (apiKey && !hasValidAuth(req, apiKey)) {
+        throw new ServiceError(401, "authentication_required", "Authentication required", {
+          "www-authenticate": "Bearer",
         });
       }
 

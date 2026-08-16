@@ -309,6 +309,35 @@ test("keeps timed-out adapter work counted until it settles", async () => {
   release();
 });
 
+test("keeps identical timed-out work coalesced until the adapter settles", async () => {
+  let calls = 0;
+  const releases = [];
+  const coordinator = createCoordinator({
+    adapters: {
+      address: adapter("address-intelligence", "0.1.0", async () => {
+        calls += 1;
+        await new Promise((resolve) => releases.push(resolve));
+        return { address: ADDRESS, risk: { score: 10, level: "LOW" } };
+      }),
+    },
+    defaultDeadlineMs: 20,
+    maxConcurrentAssessments: 2,
+  });
+  const input = request("ADDRESS", { address: ADDRESS, network: "mainnet" });
+
+  try {
+    assert.equal((await coordinator.assess(input)).status, "TIMEOUT");
+    assert.equal((await coordinator.assess(input)).status, "TIMEOUT");
+    assert.equal(calls, 1);
+    releases.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await coordinator.assess(input)).status, "TIMEOUT");
+    assert.equal(calls, 2);
+  } finally {
+    releases.forEach((release) => release());
+  }
+});
+
 test("keeps a standalone process alive until the deadline expires", () => {
   const script = `
     import { createCoordinator } from "./coordinator/index.mjs";

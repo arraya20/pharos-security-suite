@@ -291,7 +291,7 @@ export function createServer({
         });
       }
 
-      if (!isLoopbackHost(host) && !hasValidAuth(req, apiKey)) {
+      if (apiKey && !hasValidAuth(req, apiKey)) {
         throw new ServiceError(401, "authentication_required", "Authentication required", {
           "www-authenticate": "Bearer",
         });

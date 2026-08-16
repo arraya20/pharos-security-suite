@@ -414,7 +414,7 @@ export function createServer({
       return;
     }
 
-    if (!isLoopbackHost(host) && !hasValidAuth(req, apiKey)) {
+    if (apiKey && !hasValidAuth(req, apiKey)) {
       sendJson(res, 401, { error: "authentication required" }, {
         "WWW-Authenticate": "Bearer",
       });

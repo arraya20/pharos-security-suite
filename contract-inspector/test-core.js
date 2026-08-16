@@ -124,6 +124,29 @@ import { resolveSelector } from "./lib/fourbyte.js";
 }
 
 {
+  const zero = `0x${"0".repeat(64)}`;
+  const fakeRpc = {
+    chainId: async () => "0x688",
+    getBlockNumber: async () => "0x10",
+    getCode: async () => "0x6000",
+    getStorageAt: async () => zero,
+    ethCallSafe: async (_address, data) => data === "0x8da5cb5b"
+      ? { ok: false, data: null, transient: true, error: "RPC timeout" }
+      : { ok: false, data: null, transient: false, error: "revert" },
+  };
+
+  const report = await inspectContract({
+    address: "0x0000000000000000000000000000000000000001",
+    network: "mainnet",
+    online: false,
+    rpc: fakeRpc,
+  });
+
+  assert.equal(report.status, "PARTIAL");
+  assert.ok(report.incomplete.some(({ code }) => code === "METADATA_READ_FAILED"));
+}
+
+{
   const originalFetch = globalThis.fetch;
   const zero = `0x${"0".repeat(64)}`;
   globalThis.fetch = async () => new Response("unavailable", { status: 503 });

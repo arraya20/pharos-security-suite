@@ -134,6 +134,12 @@ export async function inspectContract({
   const standards = detectStandards(dis.selectors, interfaces, implDis?.selectors || []);
 
   const meta = await readMetadata(rpc, address, snapshotBlock);
+  if (meta.errors.length) {
+    incomplete.push({
+      code: "METADATA_READ_FAILED",
+      message: "One or more metadata reads failed; ownership or token details may be under-reported.",
+    });
+  }
 
   const risk = assessRisk({ proxy, dis, implDis, dangerous, standards, meta, resolvedFunctions, unresolvedSelectors });
 

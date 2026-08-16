@@ -120,7 +120,11 @@ function sanitizeSpecialistValue(value, seen = new Set()) {
 
 function warningsFrom(raw) {
   const warnings = (raw.incomplete || []).map(({ code, message }) => ({ code, message }));
-  if (Array.isArray(raw?.metadata?.errors) && raw.metadata.errors.length) {
+  if (
+    Array.isArray(raw?.metadata?.errors) &&
+    raw.metadata.errors.length &&
+    !warnings.some(({ code }) => code === "METADATA_READ_FAILED")
+  ) {
     warnings.push({
       code: "INCOMPLETE_METADATA",
       message: "Some contract metadata could not be retrieved.",

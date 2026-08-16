@@ -412,6 +412,66 @@ def test_npm_package_json_findings():
     assert "SC001" in ids and "SC006" in ids and "SC007" in ids
 
 
+def test_npm_valid_lockfile_uses_resolved_versions():
+    pkg = comp("json", json.dumps({
+        "dependencies": {"web3": "^4.0.0"}
+    }), path="app/package.json")
+    lock = comp("json", json.dumps({
+        "lockfileVersion": 3,
+        "packages": {"": {}, "node_modules/web3": {"version": "1.2.0"}}
+    }), path="app/package-lock.json")
+    ids = rule_ids(DependencyAnalyzer(use_network=False).analyze([pkg, lock]))
+    assert "SC004" in ids
+    assert "SC001" not in ids
+
+
+def test_npm_malformed_or_empty_lockfile_cannot_suppress_manifest_findings():
+    pkg = comp("json", json.dumps({
+        "dependencies": {"web3": "1.2.0", "etherz": "1.0.0"}
+    }), path="app/package.json")
+    malformed = comp("json", "not-json", path="app/package-lock.json")
+    empty = comp("json", json.dumps({
+        "lockfileVersion": 3,
+        "packages": {}
+    }), path="app/package-lock.json")
+
+    for lock in (malformed, empty):
+        ids = rule_ids(DependencyAnalyzer(use_network=False).analyze([pkg, lock]))
+        assert "SC004" in ids
+        assert "SC006" in ids
+
+
+def test_npm_shrinkwrap_uses_resolved_versions():
+    pkg = comp("json", json.dumps({
+        "dependencies": {"web3": "^4.0.0"}
+    }), path="app/package.json")
+    lock = comp("json", json.dumps({
+        "lockfileVersion": 3,
+        "packages": {"": {}, "node_modules/web3": {"version": "1.2.0"}}
+    }), path="app/npm-shrinkwrap.json")
+    ids = rule_ids(DependencyAnalyzer(use_network=False).analyze([pkg, lock]))
+    assert "SC004" in ids
+    assert "SC001" not in ids
+
+
+def test_npm_lockfile_cannot_hide_unresolved_or_nonregistry_manifest_dependencies():
+    pkg = comp("json", json.dumps({
+        "dependencies": {
+            "left-pad": "^1.0.0",
+            "etherz": "1.0.0",
+            "private-package": "git+https://example.com/private.git",
+        }
+    }), path="app/package.json")
+    lock = comp("json", json.dumps({
+        "lockfileVersion": 3,
+        "packages": {"": {}, "node_modules/left-pad": {"version": "1.0.0"}}
+    }), path="app/package-lock.json")
+
+    ids = rule_ids(DependencyAnalyzer(use_network=False).analyze([pkg, lock]))
+    assert "SC006" in ids
+    assert "SC007" in ids
+
+
 def test_requirements_extras_and_direct_url():
     c = comp("text", "requests[security]>=2.0\npkg @ https://example.com/pkg.whl\n", path="requirements.txt")
     findings = DependencyAnalyzer(use_network=False).analyze([c])

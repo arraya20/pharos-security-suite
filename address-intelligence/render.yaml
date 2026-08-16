@@ -10,6 +10,8 @@ services:
         value: 20
       - key: HOST
         value: 0.0.0.0
+      - key: API_KEY
+        sync: false
       - key: RATE_LIMIT_MAX
         value: 60
       - key: RATE_LIMIT_WINDOW_MS

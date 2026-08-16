@@ -1,6 +1,6 @@
 """Dependency analyzer.
 
-Parses Python (requirements.txt / pyproject) and npm (package.json) manifests,
+Parses Python requirements and npm manifests/lockfiles,
 then:
   * Flags unpinned dependencies (SC-style).
   * Flags likely typosquats of popular Web3/Python packages.
@@ -165,7 +165,7 @@ def _parse_package_json(comp: Component) -> list[_Dep]:
     return deps
 
 
-def _parse_package_lock(comp: Component) -> list[_Dep]:
+def _parse_package_lock(comp: Component) -> list[_Dep] | None:
     """Read resolved npm versions from package-lock v1/v2/v3.
 
     Lockfiles are authoritative for the installed dependency graph, so use
@@ -174,7 +174,9 @@ def _parse_package_lock(comp: Component) -> list[_Dep]:
     try:
         data = json.loads(comp.text)
     except (json.JSONDecodeError, ValueError):
-        return []
+        return None
+    if not isinstance(data, dict) or data.get("lockfileVersion") not in (1, 2, 3):
+        return None
     deps: list[_Dep] = []
     seen: set[tuple[str, str]] = set()
 
@@ -191,8 +193,8 @@ def _parse_package_lock(comp: Component) -> list[_Dep]:
     packages = data.get("packages")
     if isinstance(packages, dict):
         for package_path, entry in packages.items():
-            if package_path.startswith("node_modules/"):
-                add(package_path.split("node_modules/")[-1], entry)
+            if "node_modules/" in package_path:
+                add(package_path.rsplit("node_modules/", 1)[-1], entry)
 
     def walk(entries):
         if not isinstance(entries, dict):
@@ -204,7 +206,7 @@ def _parse_package_lock(comp: Component) -> list[_Dep]:
     # npm lockfile v1 stores the tree under a top-level dependencies object.
     if not packages:
         walk(data.get("dependencies"))
-    return deps
+    return deps or None
 
 
 def _directory(path: str) -> str:
@@ -213,22 +215,35 @@ def _directory(path: str) -> str:
 
 def _collect(components: list[Component]) -> list[_Dep]:
     deps: list[_Dep] = []
-    lock_dirs = set()
+    locks: dict[str, tuple[int, list[_Dep]]] = {}
     for comp in components:
         base = comp.path.rsplit("/", 1)[-1].lower()
-        if base == "package-lock.json":
-            lock_dirs.add(_directory(comp.path))
-            deps.extend(_parse_package_lock(comp))
+        if base in ("package-lock.json", "npm-shrinkwrap.json"):
+            resolved = _parse_package_lock(comp)
+            if resolved:
+                directory = _directory(comp.path)
+                priority = 1 if base == "npm-shrinkwrap.json" else 0
+                if directory not in locks or priority > locks[directory][0]:
+                    locks[directory] = (priority, resolved)
     for comp in components:
         base = comp.path.rsplit("/", 1)[-1].lower()
         if base == "requirements.txt" or base.endswith(".requirements.txt"):
             deps.extend(_parse_requirements(comp))
         elif base == "package.json":
-            # When a lockfile is present beside the manifest, its exact
-            # versions are already represented above; avoid duplicate range
-            # findings from the manifest.
-            if _directory(comp.path) not in lock_dirs:
-                deps.extend(_parse_package_json(comp))
+            manifest_deps = _parse_package_json(comp)
+            lock = locks.pop(_directory(comp.path), None)
+            if not lock:
+                deps.extend(manifest_deps)
+                continue
+            resolved = lock[1]
+            deps.extend(resolved)
+            locked_names = {dep.name for dep in resolved}
+            deps.extend(
+                dep for dep in manifest_deps
+                if dep.skip_cve or dep.name not in locked_names
+            )
+    for _, resolved in locks.values():
+        deps.extend(resolved)
     return deps
 
 

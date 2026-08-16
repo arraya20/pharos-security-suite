@@ -29,6 +29,25 @@ async function withServer(options, fn) {
 }
 
 {
+  await withServer(
+    {
+      host: "127.0.0.1",
+      apiKey: "test-secret",
+      inspect: async () => ({ address: ADDRESS, type: "EOA" }),
+    },
+    async (baseUrl) => {
+      const request = (headers = {}) => fetch(`${baseUrl}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ address: ADDRESS }),
+      });
+      assert.equal((await request()).status, 401);
+      assert.equal((await request({ Authorization: "Bearer test-secret" })).status, 200);
+    },
+  );
+}
+
+{
   await withServer({}, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/inspect`, {
       method: "POST",

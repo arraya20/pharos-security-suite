@@ -23,17 +23,26 @@ class ConcurrencyLimiter {
     this.active += 1;
     const settlements = [];
     const result = Promise.resolve().then(() => {
-      return task((promise) => settlements.push(Promise.resolve(promise)));
+      return task((promise) => {
+        const record = { settled: false, promise: null };
+        record.promise = Promise.resolve(promise).then(
+          () => { record.settled = true; },
+          () => { record.settled = true; },
+        );
+        settlements.push(record);
+      });
     });
-    return result.finally(() => {
-      if (settlements.length) {
-        Promise.allSettled(settlements).then(() => {
-          this.active -= 1;
-        });
-      } else {
+    const settled = result
+      .then(() => {}, () => {})
+      .then(() => Promise.allSettled(settlements.map((record) => record.promise)))
+      .finally(() => {
         this.active -= 1;
-      }
-    });
+      });
+    return {
+      result,
+      settled,
+      hasPendingSettlements: () => settlements.some((record) => !record.settled),
+    };
   }
 }
 
@@ -205,25 +214,31 @@ export function createCoordinator({
     }
 
     const startMs = now();
-    const job = limiter.run((registerSettlement) =>
+    const run = limiter.run((registerSettlement) =>
       execute(input, assessmentId, startMs, registerSettlement)
     )
-    if (!job) {
+    if (!run) {
       return withCacheStatus(
         capacityResult(input, assessmentId, startMs, now),
         "BYPASS",
         assessmentId
       );
     }
-    const trackedJob = job.then((result) => {
+    const trackedJob = run.result.then((result) => {
         if (result.status === "COMPLETE" || result.status === "PARTIAL") {
           cache.set(cacheKey, result, cacheTtlMs);
         }
         return result;
-      })
-      .finally(() => inFlight.delete(inFlightKey));
+      });
     inFlight.set(inFlightKey, trackedJob);
-    return withCacheStatus(await trackedJob, "MISS", assessmentId);
+    run.settled.finally(() => {
+      if (inFlight.get(inFlightKey) === trackedJob) inFlight.delete(inFlightKey);
+    });
+    const result = await trackedJob;
+    if (!run.hasPendingSettlements() && inFlight.get(inFlightKey) === trackedJob) {
+      inFlight.delete(inFlightKey);
+    }
+    return withCacheStatus(result, "MISS", assessmentId);
   }
 
   return { assess };

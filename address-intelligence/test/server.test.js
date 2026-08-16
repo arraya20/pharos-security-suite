@@ -34,11 +34,37 @@ test("returns service health", async () => {
     const res = await fetch(`${baseUrl}/health`);
 
     assert.equal(res.status, 200);
+    assert.equal(res.headers.get("access-control-allow-origin"), null);
     assert.deepEqual(await res.json(), {
       ok: true,
       service: "pharos-address-intelligence",
     });
   });
+});
+
+test("enforces a configured API key on loopback deployments", async () => {
+  await withServer(
+    {
+      host: "127.0.0.1",
+      apiKey: "test-secret",
+      analyze: async () => sampleAnalysis,
+    },
+    async (baseUrl) => {
+      const body = JSON.stringify({
+        address: sampleAnalysis.address,
+        network: "mainnet",
+        offline: true,
+      });
+      const request = (headers = {}) => fetch(`${baseUrl}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body,
+      });
+
+      assert.equal((await request()).status, 401);
+      assert.equal((await request({ Authorization: "Bearer test-secret" })).status, 200);
+    }
+  );
 });
 
 test("analyzes an address through the HTTP API", async () => {

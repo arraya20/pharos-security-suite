@@ -7,6 +7,7 @@ import { createCoordinator } from "../coordinator/coordinator.mjs";
 const TOTAL = Number(process.env.BENCHMARK_REQUESTS || 100);
 const CONCURRENCY = Number(process.env.BENCHMARK_CONCURRENCY || 5);
 const UPSTREAM_DELAY_MS = Number(process.env.BENCHMARK_UPSTREAM_DELAY_MS || 20);
+const CAPACITY_RETRIES = Number(process.env.BENCHMARK_CAPACITY_RETRIES || 1000);
 
 let specialistInFlight = 0;
 let maxSpecialistInFlight = 0;
@@ -34,18 +35,31 @@ const coordinator = createCoordinator({
 
 const durations = [];
 let next = 0;
+async function assessWithCapacityRetry(input) {
+  for (let attempt = 0; attempt <= CAPACITY_RETRIES; attempt += 1) {
+    const result = await coordinator.assess(input);
+    if (result.status === "COMPLETE") return result;
+    const busy = result.status === "FAILED"
+      && result.warnings.some((warning) => warning.code === "COORDINATOR_BUSY");
+    if (!busy || attempt === CAPACITY_RETRIES) {
+      throw new Error(`unexpected status ${result.status}`);
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error("unreachable");
+}
+
 async function worker() {
   while (next < TOTAL) {
     const index = next++;
     const address = `0x${(index + 1).toString(16).padStart(40, "0")}`;
     const started = performance.now();
-    const result = await coordinator.assess({
+    await assessWithCapacityRetry({
       schemaVersion: "1.0",
       targetType: "FULL",
       target: { address, network: "mainnet" },
       options: { offline: true },
     });
-    if (result.status !== "COMPLETE") throw new Error(`unexpected status ${result.status}`);
     durations.push(performance.now() - started);
   }
 }

@@ -158,14 +158,16 @@ deployment:
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window. |
 | `REQUEST_TIMEOUT_MS` | `20000` | Request socket timeout. |
 | `CACHE_TTL_MS` | `15000` | Short in-memory cache for duplicate analyses. |
-| `CORS_ORIGIN` | `*` | CORS origin. Set a specific origin for public deployments. |
+| `CORS_ORIGIN` | unset | CORS is denied by default; set one explicit allowed origin when browser access is required. |
+| `API_KEY` | unset | Required when `HOST` is non-loopback and enforced whenever configured; send as `Authorization: Bearer ...` or `X-API-Key`. |
 | `TRUST_PROXY` | `false` | Use `X-Forwarded-For`/`X-Real-IP` for rate limiting only behind a trusted proxy. |
 | `PROS_PRICE_USD` | unset | Optional PROS/USD override for price-adjusted mainnet whale/dormant thresholds. |
 | `NATIVE_PRICE_USD` | unset | Generic native-token USD fallback if a network-specific env var is not set. |
 | `SOCIALSCAN_API_KEY` | unset | Enables SocialScan explorer enrichment; sent only in the `x-api-key` header. |
 
 `render.yaml` is included as a minimal hosted API example; it binds to
-`0.0.0.0`, runs `npm test` at build time, and starts with `npm run serve`.
+`0.0.0.0`, requires `API_KEY` to be entered as a Render secret, runs `npm test`
+at build time, and starts with `npm run serve`.
 
 ---
 

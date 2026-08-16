@@ -34,11 +34,37 @@ test("returns service health", async () => {
     const res = await fetch(`${baseUrl}/health`);
 
     assert.equal(res.status, 200);
+    assert.equal(res.headers.get("access-control-allow-origin"), null);
     assert.deepEqual(await res.json(), {
       ok: true,
       service: "pharos-address-intelligence",
     });
   });
+});
+
+test("enforces a configured API key on loopback deployments", async () => {
+  await withServer(
+    {
+      host: "127.0.0.1",
+      apiKey: "test-secret",
+      analyze: async () => sampleAnalysis,
+    },
+    async (baseUrl) => {
+      const body = JSON.stringify({
+        address: sampleAnalysis.address,
+        network: "mainnet",
+        offline: true,
+      });
+      const request = (headers = {}) => fetch(`${baseUrl}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body,
+      });
+
+      assert.equal((await request()).status, 401);
+      assert.equal((await request({ Authorization: "Bearer test-secret" })).status, 200);
+    }
+  );
 });
 
 test("analyzes an address through the HTTP API", async () => {
@@ -296,6 +322,40 @@ test("aborts analysis at the overall deadline and returns 504", async () => {
       assert.deepEqual(await res.json(), { error: "analysis deadline exceeded" });
       assert.equal(received.signal.aborted, true);
       assert.ok(Number.isFinite(received.deadline));
+    }
+  );
+});
+
+test("keeps timed-out analysis counted until upstream settles", async () => {
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => { started = resolve; });
+  const upstream = new Promise((resolve) => { release = resolve; });
+  await withServer(
+    {
+      requestTimeoutMs: 5,
+      maxConcurrentAnalyses: 1,
+      analyze: async (_address, _network, opts) => {
+        started();
+        opts.signal.addEventListener("abort", () => {});
+        await upstream;
+        return { ...sampleAnalysis, address: _address };
+      },
+    },
+    async (baseUrl) => {
+      const request = (address) => fetch(`${baseUrl}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, network: "mainnet", offline: true }),
+      });
+      const firstPromise = request(sampleAnalysis.address);
+      await startedPromise;
+      const first = await firstPromise;
+      assert.equal(first.status, 504);
+      const second = await request("0x0000000000000000000000000000000000000002");
+      assert.equal(second.status, 503);
+      assert.equal((await second.json()).error, "analysis capacity exceeded");
+      release();
     }
   );
 });

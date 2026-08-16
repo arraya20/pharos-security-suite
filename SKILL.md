@@ -75,8 +75,10 @@ curl http://127.0.0.1:8800/health
 ```
 
 For hosted deployments, set `HOST=0.0.0.0` behind a trusted platform/proxy and
-configure `CORS_ORIGIN`, `RATE_LIMIT_MAX`, `MAX_BODY_BYTES`,
+configure the required `API_KEY`, plus `CORS_ORIGIN`, `RATE_LIMIT_MAX`, `MAX_BODY_BYTES`,
 `REQUEST_TIMEOUT_MS`, and `CACHE_TTL_MS` for the expected traffic profile.
+When `API_KEY` is configured it is enforced even on a loopback bind, so the API
+can also be protected safely behind a same-host reverse proxy.
 
 ## What It Reports
 

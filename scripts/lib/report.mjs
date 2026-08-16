@@ -288,6 +288,9 @@ export function buildReport(data) {
   const risk = riskScore(data, classification);
   return {
     ...data,
+    status: typeof data.confidence === "string" && data.confidence.toLowerCase().startsWith("partial")
+      ? "PARTIAL"
+      : "COMPLETE",
     classification,
     risk,
   };
